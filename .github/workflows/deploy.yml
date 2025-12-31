@@ -28,28 +28,25 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: farmsquare-connect/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: ./farmsquare-connect
         run: npm ci
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Build with base path
-        working-directory: ./farmsquare-connect
         env:
-          # Replace 'MY-FARM-SQUARE-WORK' with your actual repository name
-          # If your repo is at github.com/username/repo-name, use '/repo-name/'
-          # For root domain (username.github.io), use '/'
+          # Repository name: farmsquare-connect
+          # Site URL: https://bosspetite.github.io/farmsquare-connect/
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
         run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './farmsquare-connect/dist'
+          path: './dist'
 
   deploy:
     environment:
