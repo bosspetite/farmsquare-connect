@@ -23,21 +23,25 @@ const FarmerKYC = () => {
   }, [user, refreshKey]);
   
   // Determine initial step based on KYC status
-  const getInitialStep = () => {
-    if (!kycData) return 0; // No KYC data = start from beginning
-    if (kycData.status === 'APPROVED') return 2; // Show approved message
-    if (kycData.status === 'REJECTED') return 0; // Start over if rejected
-    if (kycData.status === 'IN_REVIEW') return 2; // Show review status
+  const getInitialStep = (data: typeof kycData) => {
+    if (!data) return 0; // No KYC data = start from beginning
+    if (data.status === 'APPROVED') return 2; // Show approved message
+    if (data.status === 'REJECTED') return 0; // Start over if rejected
+    if (data.status === 'IN_REVIEW') return 2; // Show review status
     return 0; // NOT_STARTED = start from beginning
   };
   
-  const [step, setStep] = useState(getInitialStep());
-  const [selfie, setSelfie] = useState<string[]>(kycData?.selfiePhoto ? [kycData.selfiePhoto] : []);
-  const [idPhoto, setIdPhoto] = useState<string[]>(kycData?.idPhoto ? [kycData.idPhoto] : []);
+  const [step, setStep] = useState(() => getInitialStep(kycData));
+  const [selfie, setSelfie] = useState<string[]>(() => kycData?.selfiePhoto ? [kycData.selfiePhoto] : []);
+  const [idPhoto, setIdPhoto] = useState<string[]>(() => kycData?.idPhoto ? [kycData.idPhoto] : []);
 
   // Update step when kycData changes
   useEffect(() => {
-    setStep(getInitialStep());
+    if (kycData) {
+      setStep(getInitialStep(kycData));
+      setSelfie(kycData.selfiePhoto ? [kycData.selfiePhoto] : []);
+      setIdPhoto(kycData.idPhoto ? [kycData.idPhoto] : []);
+    }
   }, [kycData]);
 
   const handleSubmit = () => {
