@@ -1,20 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Lock, Phone, MapPin, Key, Shield, AlertCircle, CheckCircle } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { getKYCByUserId } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 const FarmerProfile = () => {
   const { user } = useAuth();
-  const kycData = user ? getKYCByUserId(user.id) : null;
+  const [kycData, setKycData] = useState(user ? getKYCByUserId(user.id) : null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [phoneForReset, setPhoneForReset] = useState('');
+
+  // Refresh KYC data periodically
+  useEffect(() => {
+    if (user) {
+      const data = getKYCByUserId(user.id);
+      setKycData(data);
+    }
+  }, [user]);
 
   const handlePasswordChange = () => {
     if (!newPassword || !confirmPassword) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Camera, CreditCard, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { Stepper } from '@/components/ui/Stepper';
@@ -11,7 +11,16 @@ const steps = [{ label: 'Selfie' }, { label: 'ID' }, { label: 'Review' }];
 
 const FarmerKYC = () => {
   const { user } = useAuth();
-  const kycData = user ? getKYCByUserId(user.id) : null;
+  const [kycData, setKycData] = useState(user ? getKYCByUserId(user.id) : null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Refresh KYC data when user or refreshKey changes
+  useEffect(() => {
+    if (user) {
+      const data = getKYCByUserId(user.id);
+      setKycData(data);
+    }
+  }, [user, refreshKey]);
   
   // Determine initial step based on KYC status
   const getInitialStep = () => {
@@ -26,6 +35,11 @@ const FarmerKYC = () => {
   const [selfie, setSelfie] = useState<string[]>(kycData?.selfiePhoto ? [kycData.selfiePhoto] : []);
   const [idPhoto, setIdPhoto] = useState<string[]>(kycData?.idPhoto ? [kycData.idPhoto] : []);
 
+  // Update step when kycData changes
+  useEffect(() => {
+    setStep(getInitialStep());
+  }, [kycData]);
+
   const handleSubmit = () => {
     if (!user) return;
     if (!selfie[0] || !idPhoto[0]) {
@@ -36,9 +50,20 @@ const FarmerKYC = () => {
       });
       return;
     }
+    
+    // Update KYC status
     updateKYCStatus(user.id, 'IN_REVIEW', selfie[0], idPhoto[0]);
+    
+    // Refresh the data
+    const updatedData = getKYCByUserId(user.id);
+    setKycData(updatedData);
+    setRefreshKey(prev => prev + 1);
     setStep(2);
-    toast({ title: 'KYC submitted for review', description: 'Your documents are being verified. This usually takes 24-48 hours.' });
+    
+    toast({ 
+      title: 'KYC submitted for review', 
+      description: 'Your documents are being verified. This usually takes 24-48 hours.' 
+    });
   };
 
   // Only show approved if status is explicitly APPROVED
@@ -68,7 +93,18 @@ const FarmerKYC = () => {
             <h2 className="text-xl font-display font-bold text-foreground mb-2">Verification Failed</h2>
             <p className="text-muted-foreground mb-4">Please resubmit your documents.</p>
             <button
-              onClick={() => { setStep(0); setSelfie([]); setIdPhoto([]); }}
+              onClick={() => { 
+                setStep(0); 
+                setSelfie([]); 
+                setIdPhoto([]);
+                // Clear KYC data to start fresh
+                if (user) {
+                  updateKYCStatus(user.id, 'NOT_STARTED');
+                  const updatedData = getKYCByUserId(user.id);
+                  setKycData(updatedData);
+                  setRefreshKey(prev => prev + 1);
+                }
+              }}
               className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium"
             >
               Resubmit

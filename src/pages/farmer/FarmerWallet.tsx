@@ -1,12 +1,11 @@
-import { useState } from 'react';
-import { Wallet, ArrowDownLeft, ArrowUpRight, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, getKYCByUserId, formatNaira, formatDate } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
-import { AlertCircle } from 'lucide-react';
 
 const banks = ['GTBank', 'Access Bank', 'Zenith Bank', 'First Bank', 'UBA'];
 
@@ -20,8 +19,16 @@ const FarmerWallet = () => {
   const wallet = user ? getWalletByUserId(user.id) : null;
   const transactions = user ? getTransactionsByUserId(user.id) : [];
   const withdrawals = user ? getWithdrawalsByUserId(user.id) : [];
-  const kycData = user ? getKYCByUserId(user.id) : null;
+  const [kycData, setKycData] = useState(user ? getKYCByUserId(user.id) : null);
   const isKYCApproved = kycData?.status === 'APPROVED';
+
+  // Refresh KYC data
+  useEffect(() => {
+    if (user) {
+      const data = getKYCByUserId(user.id);
+      setKycData(data);
+    }
+  }, [user]);
 
   const handleWithdraw = () => {
     if (!user || !amount || !selectedBank) return;
