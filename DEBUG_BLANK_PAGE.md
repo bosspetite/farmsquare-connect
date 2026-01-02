@@ -1,125 +1,127 @@
-# 🔍 Debug Blank Page Issue
+# 🔍 Debug Blank Page - Step by Step
 
-## Why You're Seeing a Blank Page
+## Quick Fix Steps
 
-The blank page means the JavaScript isn't loading or there's an error. Let's diagnose:
+### Step 1: Check Browser Console
+1. **Press `F12`** (opens Developer Tools)
+2. **Click "Console" tab**
+3. **Look for RED errors**
+4. **Copy any error messages** you see
 
-## Step 1: Check Browser Console (IMPORTANT!)
+### Step 2: Check Network Tab
+1. **Press `F12`**
+2. **Click "Network" tab**
+3. **Refresh the page** (`F5`)
+4. **Look for RED failed requests** (404, 500, etc.)
+5. **Check if `main.tsx` or `index.html` loaded**
 
-1. **Open your site**: https://bosspetite.github.io/farmsquare-connect/
-2. **Press F12** to open Developer Tools
-3. **Click the "Console" tab**
-4. **Look for red errors**
+### Step 3: Clear Everything
+1. **Press `F12`** → **Console tab**
+2. **Paste this and press Enter:**
+```javascript
+localStorage.clear();
+sessionStorage.clear();
+location.reload();
+```
 
-### Common Errors You Might See:
+### Step 4: Hard Refresh
+- **Windows**: `Ctrl + Shift + R` or `Ctrl + F5`
+- **Mac**: `Cmd + Shift + R`
 
-**Error 1: "Failed to load resource" (404)**
-- The JavaScript/CSS files aren't found
-- **Fix**: Check if GitHub Actions deployment succeeded
+### Step 5: Check if Dev Server is Running
+Look at your terminal/command prompt. You should see:
+```
+VITE v7.x.x  ready in xxx ms
 
-**Error 2: "Cannot read property..." or "undefined"**
-- JavaScript error in the code
-- **Fix**: Share the error message
+➜  Local:   http://localhost:8080/
+```
 
-**Error 3: "CORS error"**
-- Cross-origin issue
-- **Fix**: Usually not the problem with GitHub Pages
+If you don't see this, the server isn't running!
 
-**Error 4: No errors, just blank**
-- JavaScript might not be executing
-- **Fix**: Check Network tab (see Step 2)
+---
 
-## Step 2: Check Network Tab
+## Common Issues & Fixes
 
-1. **Press F12** → **Network tab**
-2. **Refresh the page** (Ctrl+R)
-3. **Look for these files**:
-   - `index.html` - Should be 200 (success)
-   - `index-XXXXX.js` - Should be 200 (success)
-   - `index-XXXXX.css` - Should be 200 (success)
+### Issue 1: "Cannot find module" or "Failed to resolve"
+**Fix**: Stop the server (`Ctrl + C`) and restart:
+```bash
+npm run dev
+```
 
-### If files show 404 (Not Found):
-- The deployment didn't work correctly
-- Check GitHub Actions (see Step 3)
+### Issue 2: "Unexpected token" or Syntax Error
+**Fix**: Check browser console for the exact file/line with the error
 
-### If files show 200 but page is blank:
-- JavaScript error (check Console tab)
+### Issue 3: White/Blank Page
+**Possible causes:**
+- JavaScript error preventing render
+- CSS not loading
+- React error boundary catching error
 
-## Step 3: Check GitHub Actions
+**Fix**: 
+1. Check console (F12) for errors
+2. Check if you see "✅ App rendered successfully" in console
+3. If you see an error boundary message, click "Reload Page"
 
-1. Go to: https://github.com/bosspetite/farmsquare-connect/actions
-2. **Click on the latest workflow run**
-3. **Check if it has a green checkmark ✅**
-4. **If it's red ❌, click on it to see the error**
+### Issue 4: Port Already in Use
+**Error**: `Port 8080 is already in use`
 
-### Common Workflow Errors:
+**Fix**:
+```bash
+# Find and kill the process using port 8080
+# Windows PowerShell:
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8080).OwningProcess | Stop-Process
+```
 
-**Error: "Build failed"**
-- Check the build logs
-- Usually a code error
+---
 
-**Error: "Deployment failed"**
-- Check deployment logs
-- Might be a permissions issue
+## What to Check in Console
 
-**No workflow runs:**
-- GitHub Pages might not be enabled
-- See Step 4
+### ✅ Good Signs:
+- `✅ App rendered successfully`
+- `📍 Base URL: /`
+- `🌐 Current URL: http://localhost:8080/`
+- No red errors
 
-## Step 4: Verify GitHub Pages Settings
+### ❌ Bad Signs:
+- Red error messages
+- `Failed to load resource`
+- `Uncaught Error`
+- `Cannot read property of undefined`
 
-1. Go to: https://github.com/bosspetite/farmsquare-connect/settings/pages
-2. **Source** should be: **"GitHub Actions"** (NOT "Deploy from a branch")
-3. **If it's not set**, select "GitHub Actions" and click "Save"
+---
 
-## Step 5: Test Direct File Access
+## Quick Test
 
-Try accessing these URLs directly:
+Open browser console (F12) and run:
+```javascript
+// Check if React is loaded
+console.log('React:', typeof React !== 'undefined' ? '✅ Loaded' : '❌ Not loaded');
 
-1. **HTML**: https://bosspetite.github.io/farmsquare-connect/index.html
-2. **Test page**: https://bosspetite.github.io/farmsquare-connect/test.html
+// Check if root element exists
+console.log('Root element:', document.getElementById('root') ? '✅ Found' : '❌ Not found');
 
-If these work but the main page doesn't, it's a routing issue.
+// Check localStorage
+console.log('localStorage:', localStorage.getItem('farmsquare_state') ? '✅ Has data' : '✅ Empty (OK)');
+```
 
-## Step 6: Check the Actual Deployed Files
+---
 
-1. Go to: https://github.com/bosspetite/farmsquare-connect
-2. Look for a **"gh-pages" branch** or check the **Actions artifacts**
-3. Verify the files are there
+## Still Blank?
 
-## Quick Fixes to Try:
+1. **Share the console errors** (F12 → Console → Copy errors)
+2. **Check terminal** for dev server errors
+3. **Try a different browser** (Chrome, Firefox, Edge)
+4. **Clear browser cache** completely
 
-### Fix 1: Hard Refresh
-- **Windows**: Ctrl+Shift+R or Ctrl+F5
-- **Mac**: Cmd+Shift+R
+---
 
-### Fix 2: Clear Cache
-1. Press **Ctrl+Shift+Delete**
-2. Select "Cached images and files"
-3. Click "Clear data"
-4. Refresh the page
+## Emergency Fix
 
-### Fix 3: Try Incognito/Private Mode
-- This bypasses cache
-- If it works in incognito, it's a cache issue
-
-### Fix 4: Try Different Browser
-- Test in Chrome, Firefox, Edge
-- If one works, it's browser-specific
-
-## What to Share for Help:
-
-If you're still stuck, share:
-1. **Console errors** (F12 → Console tab)
-2. **Network tab** - which files are 404?
-3. **GitHub Actions status** - did deployment succeed?
-4. **Screenshot** of the browser console
-
-## Most Likely Causes:
-
-1. **Deployment didn't run** - Check GitHub Actions
-2. **GitHub Pages not enabled** - Check settings
-3. **JavaScript file 404** - Base path issue
-4. **JavaScript error** - Check console
-5. **Cache issue** - Try incognito mode
-
+If nothing works, try this in console:
+```javascript
+// Nuclear option - clear everything
+localStorage.clear();
+sessionStorage.clear();
+indexedDB.deleteDatabase('farmsquare');
+location.reload(true);
+```

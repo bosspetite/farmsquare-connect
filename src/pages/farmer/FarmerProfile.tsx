@@ -5,7 +5,6 @@ import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { getKYCByUserId } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
-import { toast } from '@/hooks/use-toast';
 
 const FarmerProfile = () => {
   const { user } = useAuth();
