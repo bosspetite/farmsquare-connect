@@ -7,11 +7,10 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => {
   // GitHub Pages project site:
   // https://<USERNAME>.github.io/<REPO>/
-  // Vite must use base "/<REPO>/" for correct asset paths in production. :contentReference[oaicite:1]{index=1}
+  // Vite must use base "/<REPO>/" for correct asset paths in production.
   const repoName = "farmsquare-connect";
-  const base =
-    process.env.VITE_BASE_PATH ||
-    (mode === "production" ? `/${repoName}/` : "/");
+  // Always use env var if set (for GitHub Actions), otherwise use repo name in production
+  const base = process.env.VITE_BASE_PATH || (mode === "production" ? `/${repoName}/` : "/");
 
   return {
     base,
