@@ -33,21 +33,25 @@ import "./index.css";
 })();
 
 // Error handling for React rendering
-try {
-  const rootElement = document.getElementById("root");
-  if (!rootElement) {
-    console.error("Root element not found!");
-    document.body.innerHTML = '<div style="padding: 20px; color: red;">Error: Root element not found!</div>';
-  } else {
-    createRoot(rootElement).render(<App />);
-    console.log("App rendered successfully");
-    console.log("Base URL:", import.meta.env.BASE_URL);
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+  console.error("Root element not found!");
+  document.body.innerHTML = '<div style="padding: 40px; text-align: center; background: #0a0f0a; color: #ef4444; min-height: 100vh; display: flex; align-items: center; justify-content: center;"><h1>Error: Root element not found!</h1><p>Please check if index.html has a div with id="root"</p></div>';
+} else {
+  try {
+    const root = createRoot(rootElement);
+    root.render(<App />);
+    console.log("✅ App rendered successfully");
+    console.log("📍 Base URL:", import.meta.env.BASE_URL);
+    console.log("🌐 Current URL:", window.location.href);
+  } catch (error) {
+    console.error("❌ Error rendering app:", error);
+    rootElement.innerHTML = `<div style="padding: 40px; text-align: center; background: #0a0f0a; color: #ef4444; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+      <h1 style="font-size: 24px; margin-bottom: 20px;">Error Loading App</h1>
+      <p style="margin-bottom: 10px;">${error instanceof Error ? error.message : String(error)}</p>
+      <p style="color: #94a3b8;">Check the browser console (F12) for more details.</p>
+      <button onclick="window.location.reload()" style="margin-top: 20px; padding: 12px 24px; background: #22c55e; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">Reload Page</button>
+    </div>`;
   }
-} catch (error) {
-  console.error("Error rendering app:", error);
-  document.body.innerHTML = `<div style="padding: 20px; color: red;">
-    <h1>Error Loading App</h1>
-    <p>${error instanceof Error ? error.message : String(error)}</p>
-    <p>Check the browser console (F12) for more details.</p>
-  </div>`;
 }

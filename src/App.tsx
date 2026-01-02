@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Public pages
 import LandingPage from "./pages/LandingPage";
@@ -38,50 +39,52 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter basename={import.meta.env.BASE_URL}>
-          <Routes>
-            {/* Public */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/how-it-works" element={<HowItWorksPage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/contact" element={<ContactPage />} />
-            
-            {/* Farmer */}
-            <Route path="/farmer/dashboard" element={<FarmerDashboard />} />
-            <Route path="/farmer/create-listing" element={<CreateListing />} />
-            <Route path="/farmer/listings" element={<FarmerListings />} />
-            <Route path="/farmer/orders" element={<FarmerOrders />} />
-            <Route path="/farmer/orders/:orderId" element={<FarmerOrderDetail />} />
-            <Route path="/farmer/wallet" element={<FarmerWallet />} />
-            <Route path="/farmer/profile" element={<FarmerProfile />} />
-            <Route path="/farmer/kyc" element={<FarmerKYC />} />
-            
-            {/* Buyer */}
-            <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
-            <Route path="/buyer/marketplace" element={<BuyerMarketplace />} />
-            <Route path="/buyer/listings/:listingId" element={<BuyerListingDetail />} />
-            <Route path="/buyer/orders" element={<BuyerOrders />} />
-            <Route path="/buyer/orders/:orderId" element={<BuyerOrderDetail />} />
-            <Route path="/buyer/reports" element={<BuyerReports />} />
-            
-            {/* Agent */}
-            <Route path="/agent/*" element={<AgentDashboard />} />
-            
-            {/* Admin */}
-            <Route path="/admin/*" element={<AdminDashboard />} />
-            
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
+            <Routes>
+              {/* Public */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/how-it-works" element={<HowItWorksPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              
+              {/* Farmer */}
+              <Route path="/farmer/dashboard" element={<FarmerDashboard />} />
+              <Route path="/farmer/create-listing" element={<CreateListing />} />
+              <Route path="/farmer/listings" element={<FarmerListings />} />
+              <Route path="/farmer/orders" element={<FarmerOrders />} />
+              <Route path="/farmer/orders/:orderId" element={<FarmerOrderDetail />} />
+              <Route path="/farmer/wallet" element={<FarmerWallet />} />
+              <Route path="/farmer/profile" element={<FarmerProfile />} />
+              <Route path="/farmer/kyc" element={<FarmerKYC />} />
+              
+              {/* Buyer */}
+              <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
+              <Route path="/buyer/marketplace" element={<BuyerMarketplace />} />
+              <Route path="/buyer/listings/:listingId" element={<BuyerListingDetail />} />
+              <Route path="/buyer/orders" element={<BuyerOrders />} />
+              <Route path="/buyer/orders/:orderId" element={<BuyerOrderDetail />} />
+              <Route path="/buyer/reports" element={<BuyerReports />} />
+              
+              {/* Agent */}
+              <Route path="/agent/*" element={<AgentDashboard />} />
+              
+              {/* Admin */}
+              <Route path="/admin/*" element={<AdminDashboard />} />
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
