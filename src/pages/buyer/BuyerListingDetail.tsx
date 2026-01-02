@@ -94,11 +94,28 @@ const BuyerListingDetail = () => {
         </button>
 
         {/* Image */}
-        <div className="w-full h-64 rounded-2xl bg-muted flex items-center justify-center overflow-hidden">
-          {listing.photos[0] ? (
-            <img src={listing.photos[0]} alt={listing.commodity} className="w-full h-full object-cover" />
+        <div className="w-full h-64 rounded-2xl bg-muted flex items-center justify-center overflow-hidden relative">
+          {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
+            <img 
+              src={listing.photos[0]} 
+              alt={listing.commodity} 
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent && !parent.querySelector('.fallback-emoji')) {
+                  const fallback = document.createElement('div');
+                  fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center';
+                  const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾';
+                  fallback.innerHTML = `<span class="text-6xl">${emoji}</span>`;
+                  parent.appendChild(fallback);
+                }
+              }}
+            />
           ) : (
-            <span className="text-6xl">🌽</span>
+            <span className="text-6xl">
+              {listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾'}
+            </span>
           )}
         </div>
 

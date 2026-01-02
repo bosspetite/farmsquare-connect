@@ -1,20 +1,32 @@
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight } from 'lucide-react';
+import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight, Eye, DollarSign, CheckCircle } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { StatCard } from '@/components/ui/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getOrdersByFarmerId, formatNaira, formatTimeAgo, getAppState } from '@/lib/store';
+import { getWalletByUserId, getOrdersByFarmerId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState } from '@/lib/store';
 
 const FarmerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   
   const wallet = user ? getWalletByUserId(user.id) : null;
-  const orders = user ? getOrdersByFarmerId(user.id).slice(0, 3) : [];
+  const allOrders = user ? getOrdersByFarmerId(user.id) : [];
+  const orders = allOrders.slice(0, 3);
   const state = getAppState();
+  const listings = user ? getListingsByFarmerId(user.id) : [];
   
-  const userListing = state.listings.find(l => l.farmerId === user?.id);
+  // Calculate stats
+  const activeListings = listings.filter(l => l.status === 'Active').length;
+  const totalOrders = allOrders.length;
+  const pendingOrders = allOrders.filter(o => o.status === 'Pending').length;
+  const completedOrders = allOrders.filter(o => o.status === 'Delivered').length;
+  const totalRevenue = allOrders
+    .filter(o => o.status === 'Delivered')
+    .reduce((sum, o) => sum + o.amount, 0);
+  
+  const userListing = listings.find(l => l.status === 'Active');
   const marketPrice = state.marketPrices.find(m => m.commodity === userListing?.commodity);
   
   const priceDiff = userListing && marketPrice 
@@ -55,6 +67,32 @@ const FarmerDashboard = () => {
           <ChevronRight className="w-6 h-6" />
         </button>
 
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            icon={Package}
+            label="Active Listings"
+            value={activeListings}
+            onClick={() => navigate('/farmer/listings')}
+          />
+          <StatCard
+            icon={ShoppingCart}
+            label="Total Orders"
+            value={totalOrders}
+            onClick={() => navigate('/farmer/orders')}
+          />
+          <StatCard
+            icon={CheckCircle}
+            label="Completed"
+            value={completedOrders}
+          />
+          <StatCard
+            icon={DollarSign}
+            label="Total Revenue"
+            value={formatNaira(totalRevenue)}
+          />
+        </div>
+
         {/* Quick Actions */}
         <div className="grid grid-cols-3 gap-3">
           {[
@@ -72,6 +110,29 @@ const FarmerDashboard = () => {
             </button>
           ))}
         </div>
+        
+        {/* Pending Orders Alert */}
+        {pendingOrders > 0 && (
+          <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-farm-warning/20 flex items-center justify-center">
+                  <ShoppingCart className="w-5 h-5 text-farm-warning" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">{pendingOrders} Pending Order{pendingOrders > 1 ? 's' : ''}</p>
+                  <p className="text-sm text-muted-foreground">Requires your attention</p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/farmer/orders')}
+                className="px-4 py-2 bg-farm-warning text-foreground rounded-xl text-sm font-medium"
+              >
+                Review
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Market Price Intel */}
         {userListing && marketPrice && (
@@ -99,6 +160,46 @@ const FarmerDashboard = () => {
                   {priceDiff > 0 ? '+' : ''}{formatNaira(priceDiff)}
                 </span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Listings Preview */}
+        {activeListings > 0 && (
+          <div className="farm-card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-semibold text-foreground">Active Listings</h3>
+              <button onClick={() => navigate('/farmer/listings')} className="text-sm text-primary">
+                View all
+              </button>
+            </div>
+            <div className="space-y-3">
+              {listings.filter(l => l.status === 'Active').slice(0, 3).map((listing) => (
+                <div
+                  key={listing.id}
+                  onClick={() => navigate('/farmer/listings')}
+                  className="flex gap-3 p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                >
+                  <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
+                      <img 
+                        src={listing.photos[0]} 
+                        alt={listing.commodity} 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <Package className="w-6 h-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground">{listing.commodity}</p>
+                    <p className="text-sm text-muted-foreground">{listing.quantityKg}kg · {formatNaira(listing.pricePerKg)}/kg</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

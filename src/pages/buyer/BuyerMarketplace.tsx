@@ -82,11 +82,28 @@ const BuyerMarketplace = () => {
               onClick={() => navigate(`/buyer/listings/${listing.id}`)}
               className="farm-card-interactive cursor-pointer"
             >
-              <div className="w-full h-32 rounded-xl bg-muted mb-4 flex items-center justify-center overflow-hidden">
-                {listing.photos[0] ? (
-                  <img src={listing.photos[0]} alt={listing.commodity} className="w-full h-full object-cover" />
+              <div className="w-full h-32 rounded-xl bg-muted mb-4 flex items-center justify-center overflow-hidden relative">
+                {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
+                  <img 
+                    src={listing.photos[0]} 
+                    alt={listing.commodity} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const parent = e.currentTarget.parentElement;
+                      if (parent && !parent.querySelector('.fallback-emoji')) {
+                        const fallback = document.createElement('div');
+                        fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center';
+                        const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾';
+                        fallback.innerHTML = `<span class="text-4xl">${emoji}</span>`;
+                        parent.appendChild(fallback);
+                      }
+                    }}
+                  />
                 ) : (
-                  <span className="text-4xl">🌽</span>
+                  <span className="text-4xl">
+                    {listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾'}
+                  </span>
                 )}
               </div>
               <div className="flex items-start justify-between mb-2">

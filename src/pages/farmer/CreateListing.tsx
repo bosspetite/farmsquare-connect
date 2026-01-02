@@ -5,15 +5,17 @@ import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { Stepper } from '@/components/ui/Stepper';
 import { FileUploader } from '@/components/ui/FileUploader';
 import { useAuth } from '@/contexts/AuthContext';
-import { addListing } from '@/lib/store';
+import { addListing, formatNaira } from '@/lib/store';
 import { GradeType } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { Package } from 'lucide-react';
 
 const steps = [
   { label: 'Crop' },
   { label: 'Volume' },
   { label: 'Photos' },
   { label: 'Price' },
+  { label: 'Review' },
 ];
 
 const commodities = ['Maize', 'Cassava', 'Rice', 'Yam', 'Sorghum'] as const;
@@ -30,11 +32,41 @@ const CreateListing = () => {
   const [grade, setGrade] = useState<GradeType>('A');
 
   const handleNext = () => {
-    if (step < 3) setStep(step + 1);
+    if (step < 4) setStep(step + 1);
+  };
+  
+  const handleBack = () => {
+    if (step > 0) {
+      setStep(step - 1);
+    } else {
+      navigate('/farmer/dashboard');
+    }
   };
 
   const handlePublish = () => {
     if (!user) return;
+    
+    // Validate required fields
+    if (!quantity || parseInt(quantity) <= 0) {
+      toast({ 
+        title: 'Invalid quantity', 
+        description: 'Please enter a valid quantity',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    if (!price || parseInt(price) <= 0) {
+      toast({ 
+        title: 'Invalid price', 
+        description: 'Please enter a valid price',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Ensure photos array is properly formatted
+    const validPhotos = photos.filter(photo => photo && photo.length > 0);
     
     addListing({
       farmerId: user.id,
@@ -43,20 +75,23 @@ const CreateListing = () => {
       grade,
       quantityKg: parseInt(quantity),
       pricePerKg: parseInt(price),
-      photos,
+      photos: validPhotos, // Only include valid photos
       locationLabel: `${user.region} Farm`,
       region: user.region,
       status: 'Active',
     });
     
-    toast({ title: 'Success!', description: 'Your listing is now live.' });
-    navigate('/farmer/dashboard');
+    toast({ 
+      title: 'Success!', 
+      description: `Your ${commodity} listing is now live in the marketplace.` 
+    });
+    navigate('/farmer/listings'); // Navigate to listings page to see the new listing
   };
 
   return (
     <FarmerLayout>
       <div className="max-w-md mx-auto animate-fade-up">
-        <button onClick={() => step > 0 ? setStep(step - 1) : navigate('/farmer/dashboard')} className="flex items-center gap-2 text-muted-foreground mb-6">
+        <button onClick={handleBack} className="flex items-center gap-2 text-muted-foreground mb-6">
           <ArrowLeft className="w-5 h-5" /> Back
         </button>
 
@@ -114,9 +149,70 @@ const CreateListing = () => {
                 ))}
               </div>
             </div>
-            <button onClick={handlePublish} disabled={!price} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-              <Check className="w-5 h-5" /> Publish Listing
-            </button>
+            <button onClick={handleNext} disabled={!price} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50">Continue</button>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-display font-bold text-foreground">Review Your Listing</h2>
+            
+            {/* Preview Card */}
+            <div className="farm-card">
+              {/* Photos Preview */}
+              <div className="w-full h-48 rounded-xl bg-muted mb-4 flex items-center justify-center overflow-hidden">
+                {photos.length > 0 && photos[0] ? (
+                  <img 
+                    src={photos[0]} 
+                    alt={commodity} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <Package className="w-16 h-16 text-muted-foreground" />
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-xl font-display font-bold text-foreground">{commodity}</h3>
+                    <p className="text-sm text-muted-foreground">Grade {grade} · {quantity}kg available</p>
+                  </div>
+                  <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-medium">
+                    Grade {grade}
+                  </span>
+                </div>
+                
+                <div className="pt-3 border-t border-border">
+                  <p className="text-2xl font-bold text-primary">{formatNaira(parseInt(price || '0'))}/kg</p>
+                  <p className="text-sm text-muted-foreground mt-1">Total value: {formatNaira(parseInt(quantity || '0') * parseInt(price || '0'))}</p>
+                </div>
+                
+                <div className="pt-3 border-t border-border">
+                  <p className="text-sm text-muted-foreground">Location</p>
+                  <p className="font-medium text-foreground">{user?.region} Farm</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setStep(3)} 
+                className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-medium"
+              >
+                Edit
+              </button>
+              <button 
+                onClick={handlePublish} 
+                disabled={!price || !quantity} 
+                className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Check className="w-5 h-5" /> Publish Listing
+              </button>
+            </div>
           </div>
         )}
       </div>

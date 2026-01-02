@@ -333,6 +333,13 @@ export const updateListing = (listingId: string, updates: Partial<Listing>): voi
   }
 };
 
+// Helper: Delete listing
+export const deleteListing = (listingId: string): void => {
+  const state = getAppState();
+  state.listings = state.listings.filter(l => l.id !== listingId);
+  setAppState(state);
+};
+
 // Helper: Add new order
 export const addOrder = (order: Omit<Order, 'id' | 'createdAt'>): Order => {
   const state = getAppState();
