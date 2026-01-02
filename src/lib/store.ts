@@ -220,11 +220,7 @@ const createSeedData = (): AppState => {
       },
     ],
     kycData: [
-      {
-        userId: farmerId,
-        status: 'APPROVED',
-        submittedAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-      },
+      // No KYC data initially - farmers start with NOT_STARTED status
     ],
   };
 };
