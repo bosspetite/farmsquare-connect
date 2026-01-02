@@ -59,6 +59,7 @@ const App = () => (
             <Route path="/farmer/orders" element={<FarmerOrders />} />
             <Route path="/farmer/orders/:orderId" element={<FarmerOrderDetail />} />
             <Route path="/farmer/wallet" element={<FarmerWallet />} />
+            <Route path="/farmer/profile" element={<FarmerProfile />} />
             <Route path="/farmer/kyc" element={<FarmerKYC />} />
             
             {/* Buyer */}
