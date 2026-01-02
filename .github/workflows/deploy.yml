@@ -41,7 +41,13 @@ jobs:
           # Repository name: farmsquare-connect
           # Site URL: https://bosspetite.github.io/farmsquare-connect/
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-        run: npm run build
+        run: |
+          echo "Building with base path: /${{ github.event.repository.name }}/"
+          npm run build
+          echo "Build complete. Checking dist folder:"
+          ls -la dist/
+          echo "Checking assets folder:"
+          ls -la dist/assets/ || echo "Assets folder not found!"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
