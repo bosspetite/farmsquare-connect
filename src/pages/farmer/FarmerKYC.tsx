@@ -11,38 +11,42 @@ const steps = [{ label: 'Selfie' }, { label: 'ID' }, { label: 'Review' }];
 
 const FarmerKYC = () => {
   const { user } = useAuth();
-  const [kycData, setKycData] = useState(user ? getKYCByUserId(user.id) : null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [kycData, setKycData] = useState<ReturnType<typeof getKYCByUserId>>(null);
+  const [step, setStep] = useState(0);
+  const [selfie, setSelfie] = useState<string[]>([]);
+  const [idPhoto, setIdPhoto] = useState<string[]>([]);
   
-  // Refresh KYC data when user or refreshKey changes
+  // Load KYC data when component mounts or user changes
   useEffect(() => {
     if (user) {
-      const data = getKYCByUserId(user.id);
-      setKycData(data);
+      try {
+        const data = getKYCByUserId(user.id);
+        setKycData(data);
+        
+        // Set initial step based on status
+        if (data) {
+          if (data.status === 'APPROVED') {
+            setStep(2);
+          } else if (data.status === 'IN_REVIEW') {
+            setStep(2);
+          } else if (data.status === 'REJECTED') {
+            setStep(0);
+          } else {
+            setStep(0);
+          }
+          
+          // Load existing photos if any
+          if (data.selfiePhoto) setSelfie([data.selfiePhoto]);
+          if (data.idPhoto) setIdPhoto([data.idPhoto]);
+        } else {
+          setStep(0);
+        }
+      } catch (error) {
+        console.error('Error loading KYC data:', error);
+        setStep(0);
+      }
     }
-  }, [user, refreshKey]);
-  
-  // Determine initial step based on KYC status
-  const getInitialStep = (data: typeof kycData) => {
-    if (!data) return 0; // No KYC data = start from beginning
-    if (data.status === 'APPROVED') return 2; // Show approved message
-    if (data.status === 'REJECTED') return 0; // Start over if rejected
-    if (data.status === 'IN_REVIEW') return 2; // Show review status
-    return 0; // NOT_STARTED = start from beginning
-  };
-  
-  const [step, setStep] = useState(() => getInitialStep(kycData));
-  const [selfie, setSelfie] = useState<string[]>(() => kycData?.selfiePhoto ? [kycData.selfiePhoto] : []);
-  const [idPhoto, setIdPhoto] = useState<string[]>(() => kycData?.idPhoto ? [kycData.idPhoto] : []);
-
-  // Update step when kycData changes
-  useEffect(() => {
-    if (kycData) {
-      setStep(getInitialStep(kycData));
-      setSelfie(kycData.selfiePhoto ? [kycData.selfiePhoto] : []);
-      setIdPhoto(kycData.idPhoto ? [kycData.idPhoto] : []);
-    }
-  }, [kycData]);
+  }, [user]);
 
   const handleSubmit = () => {
     if (!user) return;
@@ -55,19 +59,27 @@ const FarmerKYC = () => {
       return;
     }
     
-    // Update KYC status
-    updateKYCStatus(user.id, 'IN_REVIEW', selfie[0], idPhoto[0]);
-    
-    // Refresh the data
-    const updatedData = getKYCByUserId(user.id);
-    setKycData(updatedData);
-    setRefreshKey(prev => prev + 1);
-    setStep(2);
-    
-    toast({ 
-      title: 'KYC submitted for review', 
-      description: 'Your documents are being verified. This usually takes 24-48 hours.' 
-    });
+    try {
+      // Update KYC status
+      updateKYCStatus(user.id, 'IN_REVIEW', selfie[0], idPhoto[0]);
+      
+      // Refresh the data
+      const updatedData = getKYCByUserId(user.id);
+      setKycData(updatedData);
+      setStep(2);
+      
+      toast({ 
+        title: 'KYC submitted for review', 
+        description: 'Your documents are being verified. This usually takes 24-48 hours.' 
+      });
+    } catch (error) {
+      console.error('Error submitting KYC:', error);
+      toast({ 
+        title: 'Error', 
+        description: 'Failed to submit KYC. Please try again.',
+        variant: 'destructive' 
+      });
+    }
   };
 
   // Only show approved if status is explicitly APPROVED
@@ -103,10 +115,13 @@ const FarmerKYC = () => {
                 setIdPhoto([]);
                 // Clear KYC data to start fresh
                 if (user) {
-                  updateKYCStatus(user.id, 'NOT_STARTED');
-                  const updatedData = getKYCByUserId(user.id);
-                  setKycData(updatedData);
-                  setRefreshKey(prev => prev + 1);
+                  try {
+                    updateKYCStatus(user.id, 'NOT_STARTED');
+                    const updatedData = getKYCByUserId(user.id);
+                    setKycData(updatedData);
+                  } catch (error) {
+                    console.error('Error resetting KYC:', error);
+                  }
                 }
               }}
               className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium"
