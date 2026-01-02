@@ -4,8 +4,9 @@ import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, formatNaira, formatDate } from '@/lib/store';
+import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, getKYCByUserId, formatNaira, formatDate } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
+import { AlertCircle } from 'lucide-react';
 
 const banks = ['GTBank', 'Access Bank', 'Zenith Bank', 'First Bank', 'UBA'];
 
@@ -19,14 +20,34 @@ const FarmerWallet = () => {
   const wallet = user ? getWalletByUserId(user.id) : null;
   const transactions = user ? getTransactionsByUserId(user.id) : [];
   const withdrawals = user ? getWithdrawalsByUserId(user.id) : [];
+  const kycData = user ? getKYCByUserId(user.id) : null;
+  const isKYCApproved = kycData?.status === 'APPROVED';
 
   const handleWithdraw = () => {
     if (!user || !amount || !selectedBank) return;
+    
+    // Check KYC status
+    if (!isKYCApproved) {
+      toast({ 
+        title: 'KYC Verification Required', 
+        description: 'Please complete KYC verification before withdrawing funds.',
+        variant: 'destructive' 
+      });
+      setShowWithdrawModal(false);
+      return;
+    }
+    
     const withdrawAmount = parseInt(amount);
+    if (withdrawAmount <= 0) {
+      toast({ title: 'Invalid amount', variant: 'destructive' });
+      return;
+    }
+    
     if (withdrawAmount > (wallet?.available || 0)) {
       toast({ title: 'Insufficient balance', variant: 'destructive' });
       return;
     }
+    
     addWithdrawal(user.id, withdrawAmount, selectedBank, '****' + Math.floor(1000 + Math.random() * 9000));
     setShowWithdrawModal(false);
     setAmount('');
@@ -44,8 +65,39 @@ const FarmerWallet = () => {
         <WalletCard
           available={wallet?.available || 0}
           pending={wallet?.pending || 0}
-          onWithdraw={() => setShowWithdrawModal(true)}
+          onWithdraw={() => {
+            if (!isKYCApproved) {
+              toast({ 
+                title: 'KYC Verification Required', 
+                description: 'Please complete KYC verification to withdraw funds.',
+                variant: 'destructive' 
+              });
+            } else {
+              setShowWithdrawModal(true);
+            }
+          }}
         />
+        
+        {/* KYC Warning */}
+        {!isKYCApproved && (
+          <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-farm-warning flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-foreground mb-1">KYC Verification Required</p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Complete your KYC verification to enable withdrawals.
+                </p>
+                <button
+                  onClick={() => window.location.href = '/farmer/kyc'}
+                  className="px-4 py-2 bg-farm-warning text-foreground rounded-xl text-sm font-medium"
+                >
+                  Complete KYC
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2">
@@ -150,9 +202,17 @@ const FarmerWallet = () => {
                 ))}
               </select>
             </div>
+            {!isKYCApproved && (
+              <div className="p-3 bg-farm-warning/10 border border-farm-warning/20 rounded-xl">
+                <p className="text-sm text-foreground">
+                  <AlertCircle className="w-4 h-4 inline mr-1" />
+                  KYC verification required to withdraw funds.
+                </p>
+              </div>
+            )}
             <button
               onClick={handleWithdraw}
-              disabled={!amount || !selectedBank}
+              disabled={!amount || !selectedBank || !isKYCApproved}
               className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
             >
               Submit Request

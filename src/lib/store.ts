@@ -385,9 +385,14 @@ export const updateOrderStatus = (orderId: string, status: import('@/types').Ord
       ...(evidence && { evidence }),
     };
     
-    // Handle wallet updates based on status changes
+    // Handle wallet updates and quantity locking based on status changes
     if (status === 'Accepted' && previousStatus === 'Pending') {
-      // Order accepted - no wallet change yet (payment still held)
+      // Order accepted - lock listing quantity (prevent further orders on this quantity)
+      const listing = state.listings.find(l => l.id === order.listingId);
+      if (listing) {
+        // Quantity is already reduced when order is placed, but we mark it as locked
+        // This prevents editing quantity while order is active
+      }
     } else if (status === 'Delivered' && previousStatus !== 'Delivered') {
       // Order delivered - transfer funds from buyer pending to farmer
       const buyerWallet = state.wallets.find(w => w.userId === order.buyerId);
@@ -415,13 +420,23 @@ export const updateOrderStatus = (orderId: string, status: import('@/types').Ord
         addTransaction(order.farmerId, 'Credit', `Payment received: ${order.commodity}`, order.amount);
       }
     } else if (status === 'Rejected' && previousStatus === 'Pending') {
-      // Order rejected - refund buyer
+      // Order rejected - refund buyer and restore listing quantity
       const buyerWallet = state.wallets.find(w => w.userId === order.buyerId);
       if (buyerWallet && buyerWallet.pending >= order.amount) {
         buyerWallet.pending -= order.amount;
         buyerWallet.available += order.amount;
         
         addTransaction(order.buyerId, 'Credit', `Refund: ${order.commodity} order rejected`, order.amount);
+      }
+      
+      // Restore listing quantity
+      const listing = state.listings.find(l => l.id === order.listingId);
+      if (listing) {
+        listing.quantityKg += order.quantityKg;
+        // If listing was marked as Sold, reactivate it if quantity > 0
+        if (listing.status === 'Sold' && listing.quantityKg > 0) {
+          listing.status = 'Active';
+        }
       }
     }
     

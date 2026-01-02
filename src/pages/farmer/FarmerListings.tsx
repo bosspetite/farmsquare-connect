@@ -6,7 +6,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
-import { getListingsByFarmerId, updateListing, deleteListing, formatNaira } from '@/lib/store';
+import { getListingsByFarmerId, updateListing, deleteListing, formatNaira, getAppState } from '@/lib/store';
 import { Listing, ListingStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { Package } from 'lucide-react';
@@ -50,6 +50,29 @@ const FarmerListings = () => {
         });
         return;
       }
+      
+      // Check if listing has active orders (can't reduce quantity below ordered amount)
+      const state = getAppState();
+      const activeOrders = state.orders.filter(
+        o => o.listingId === editingListing.id && 
+        o.status !== 'Rejected' && 
+        o.status !== 'Delivered'
+      );
+      
+      if (activeOrders.length > 0) {
+        const totalOrdered = activeOrders.reduce((sum, o) => sum + o.quantityKg, 0);
+        const newQuantity = parseInt(editQuantity);
+        
+        if (newQuantity < totalOrdered) {
+          toast({ 
+            title: 'Cannot reduce quantity', 
+            description: `You have ${totalOrdered}kg in active orders. Quantity must be at least ${totalOrdered}kg.`,
+            variant: 'destructive'
+          });
+          return;
+        }
+      }
+      
       updateListing(editingListing.id, {
         pricePerKg: parseInt(editPrice),
         quantityKg: parseInt(editQuantity),

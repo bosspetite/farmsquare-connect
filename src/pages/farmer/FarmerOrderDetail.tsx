@@ -27,14 +27,47 @@ const FarmerOrderDetail = () => {
 
   const getTimelineEvents = () => {
     const events = [
-      { label: 'Order Placed', timestamp: formatDate(order.createdAt), completed: true },
-      { label: 'Accepted', timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined, completed: !!order.acceptedAt, current: order.status === 'Pending' },
-      { label: 'Pickup Scheduled', timestamp: order.pickupScheduledAt ? formatDate(order.pickupScheduledAt) : undefined, completed: !!order.pickupScheduledAt, current: order.status === 'Accepted' },
-      { label: 'In Transit', timestamp: order.inTransitAt ? formatDate(order.inTransitAt) : undefined, completed: !!order.inTransitAt, current: order.status === 'PickupScheduled' },
-      { label: 'Delivered', timestamp: order.deliveredAt ? formatDate(order.deliveredAt) : undefined, completed: !!order.deliveredAt, current: order.status === 'InTransit' },
+      { 
+        label: 'Order Placed', 
+        timestamp: formatDate(order.createdAt), 
+        completed: true,
+        description: `Buyer placed order for ${order.quantityKg}kg`
+      },
+      { 
+        label: 'Accepted', 
+        timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined, 
+        completed: !!order.acceptedAt, 
+        current: order.status === 'Pending',
+        description: order.acceptedAt ? 'Order accepted, preparing for pickup' : 'Waiting for acceptance'
+      },
+      { 
+        label: 'Pickup Scheduled', 
+        timestamp: order.pickupScheduledAt ? formatDate(order.pickupScheduledAt) : undefined, 
+        completed: !!order.pickupScheduledAt, 
+        current: order.status === 'Accepted',
+        description: order.pickupScheduledAt ? 'Pickup date confirmed' : 'Schedule pickup date'
+      },
+      { 
+        label: 'In Transit', 
+        timestamp: order.inTransitAt ? formatDate(order.inTransitAt) : undefined, 
+        completed: !!order.inTransitAt, 
+        current: order.status === 'PickupScheduled',
+        description: order.inTransitAt ? 'Order is on the way' : 'Mark as in transit after pickup'
+      },
+      { 
+        label: 'Delivered', 
+        timestamp: order.deliveredAt ? formatDate(order.deliveredAt) : undefined, 
+        completed: !!order.deliveredAt, 
+        current: order.status === 'InTransit',
+        description: order.deliveredAt ? 'Order delivered, waiting for buyer confirmation' : 'Mark as delivered when buyer receives'
+      },
     ];
     if (order.status === 'Rejected') {
-      return [{ label: 'Order Rejected', completed: true }];
+      return [{ 
+        label: 'Order Rejected', 
+        completed: true,
+        description: 'Order was rejected, buyer has been refunded'
+      }];
     }
     return events;
   };
@@ -127,19 +160,58 @@ const FarmerOrderDetail = () => {
           <Timeline events={getTimelineEvents()} />
         </div>
 
-        {/* Evidence */}
+        {/* Order Summary */}
+        <div className="farm-card">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">Order Summary</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Commodity</span>
+              <span className="text-sm font-medium text-foreground">{order.commodity}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Quantity</span>
+              <span className="text-sm font-medium text-foreground">{order.quantityKg}kg</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Price per kg</span>
+              <span className="text-sm font-medium text-foreground">{formatNaira(order.pricePerKg)}</span>
+            </div>
+            <div className="pt-2 border-t border-border flex justify-between">
+              <span className="text-sm font-semibold text-foreground">Total Amount</span>
+              <span className="text-lg font-bold text-primary">{formatNaira(order.amount)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Evidence - Field Agent Verification (Read-only) */}
         {order.evidence && (
           <div className="farm-card">
             <h3 className="text-sm font-medium text-muted-foreground mb-3">Delivery Evidence</h3>
+            <p className="text-xs text-muted-foreground mb-3">Verified by Field Agent</p>
             {order.evidence.photos.length > 0 && (
               <div className="flex gap-2 mb-3">
                 {order.evidence.photos.map((photo, i) => (
-                  <img key={i} src={photo} alt={`Evidence ${i + 1}`} className="w-20 h-20 rounded-xl object-cover" />
+                  <img 
+                    key={i} 
+                    src={photo} 
+                    alt={`Evidence ${i + 1}`} 
+                    className="w-20 h-20 rounded-xl object-cover border border-border"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 ))}
               </div>
             )}
             {order.evidence.notes && (
-              <p className="text-sm text-muted-foreground">{order.evidence.notes}</p>
+              <div className="p-3 bg-muted/50 rounded-xl">
+                <p className="text-sm text-foreground">{order.evidence.notes}</p>
+              </div>
+            )}
+            {order.evidence.timestamp && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Verified: {formatDate(order.evidence.timestamp)}
+              </p>
             )}
           </div>
         )}
