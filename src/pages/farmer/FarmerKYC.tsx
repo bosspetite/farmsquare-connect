@@ -208,7 +208,31 @@ const FarmerKYC = () => {
                   <CheckCircle className="w-8 h-8 text-farm-info" />
                 </div>
                 <h2 className="text-xl font-display font-bold text-foreground mb-2">Under Review</h2>
-                <p className="text-muted-foreground">We're verifying your documents. This usually takes 24-48 hours.</p>
+                <p className="text-muted-foreground mb-4">We're verifying your documents. This usually takes 24-48 hours.</p>
+                <div className="mt-6 p-4 bg-muted/50 rounded-xl text-left">
+                  <p className="text-sm font-medium text-foreground mb-2">What happens next?</p>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Our team will review your selfie and ID document</li>
+                    <li>You'll receive a notification when verification is complete</li>
+                    <li>Once approved, you can withdraw funds from your wallet</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+            
+            {step === 2 && isNotStarted && !isInReview && !isApproved && !isRejected && (
+              <div className="farm-card text-center py-8">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                  <Info className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h2 className="text-xl font-display font-bold text-foreground mb-2">Get Started</h2>
+                <p className="text-muted-foreground mb-4">Complete KYC verification to enable withdrawals and access all features.</p>
+                <button
+                  onClick={() => setStep(0)}
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium"
+                >
+                  Start Verification
+                </button>
               </div>
             )}
           </>
