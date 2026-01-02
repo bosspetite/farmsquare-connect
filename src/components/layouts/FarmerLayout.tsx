@@ -24,7 +24,7 @@ const navItems = [
   { icon: Package, label: 'Inventory', path: '/farmer/listings' },
   { icon: ShoppingCart, label: 'Orders', path: '/farmer/orders' },
   { icon: Wallet, label: 'Wallet', path: '/farmer/wallet' },
-  { icon: User, label: 'Account', path: '/farmer/kyc' },
+  { icon: User, label: 'Profile', path: '/farmer/profile' },
 ];
 
 export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {

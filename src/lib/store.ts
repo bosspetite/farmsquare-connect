@@ -21,7 +21,7 @@ const createSeedData = (): AppState => {
         phone: '+2348012345678',
         role: 'farmer',
         region: 'Kaduna',
-        kycStatus: 'APPROVED',
+        kycStatus: 'NOT_STARTED', // Changed from APPROVED to NOT_STARTED
         createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ],

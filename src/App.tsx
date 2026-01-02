@@ -21,6 +21,7 @@ import FarmerOrders from "./pages/farmer/FarmerOrders";
 import FarmerOrderDetail from "./pages/farmer/FarmerOrderDetail";
 import FarmerWallet from "./pages/farmer/FarmerWallet";
 import FarmerKYC from "./pages/farmer/FarmerKYC";
+import FarmerProfile from "./pages/farmer/FarmerProfile";
 
 // Buyer pages
 import BuyerDashboard from "./pages/buyer/BuyerDashboard";
