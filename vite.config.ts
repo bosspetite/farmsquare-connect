@@ -5,10 +5,13 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Get base path from environment variable or default to root
-  // For GitHub Pages, set this to your repository name (e.g., "/MY-FARM-SQUARE-WORK/")
-  // If deploying to root domain, use "/"
-  const base = process.env.VITE_BASE_PATH || "/";
+  // GitHub Pages project site:
+  // https://<USERNAME>.github.io/<REPO>/
+  // Vite must use base "/<REPO>/" for correct asset paths in production. :contentReference[oaicite:1]{index=1}
+  const repoName = "farmsquare-connect";
+  const base =
+    process.env.VITE_BASE_PATH ||
+    (mode === "production" ? `/${repoName}/` : "/");
 
   return {
     base,
