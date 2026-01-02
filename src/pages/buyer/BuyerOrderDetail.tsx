@@ -3,7 +3,8 @@ import { ArrowLeft, MapPin, User, Truck, Shield } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Timeline } from '@/components/ui/Timeline';
-import { getAppState, formatNaira, formatDate } from '@/lib/store';
+import { getAppState, formatNaira, formatDate, confirmDelivery } from '@/lib/store';
+import { toast } from '@/hooks/use-toast';
 
 const BuyerOrderDetail = () => {
   const { orderId } = useParams();
@@ -112,6 +113,29 @@ const BuyerOrderDetail = () => {
           </div>
           <Timeline events={getTimelineEvents()} />
         </div>
+
+        {/* Delivery Confirmation */}
+        {order.status === 'Delivered' && (
+          <div className="farm-card bg-primary/5 border-primary/20">
+            <h3 className="font-semibold text-foreground mb-2">Confirm Delivery</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Confirm that you have received the order. This will release payment to the farmer.
+            </p>
+            <button
+              onClick={() => {
+                confirmDelivery(order.id);
+                toast({ 
+                  title: 'Delivery confirmed!', 
+                  description: 'Payment has been released to the farmer.' 
+                });
+                window.location.reload();
+              }}
+              className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
+            >
+              Confirm Delivery & Release Payment
+            </button>
+          </div>
+        )}
       </div>
     </BuyerLayout>
   );

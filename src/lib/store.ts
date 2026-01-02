@@ -333,6 +333,32 @@ export const updateListing = (listingId: string, updates: Partial<Listing>): voi
   }
 };
 
+// Helper: Add new order
+export const addOrder = (order: Omit<Order, 'id' | 'createdAt'>): Order => {
+  const state = getAppState();
+  const newOrder: Order = {
+    ...order,
+    id: `order_${generateId()}`,
+    createdAt: new Date().toISOString(),
+  };
+  
+  // Add order
+  state.orders.unshift(newOrder);
+  
+  // Update buyer wallet: move amount from available to pending (payment held)
+  const buyerWallet = state.wallets.find(w => w.userId === order.buyerId);
+  if (buyerWallet && buyerWallet.available >= order.amount) {
+    buyerWallet.available -= order.amount;
+    buyerWallet.pending += order.amount;
+    
+    // Add debit transaction for buyer
+    addTransaction(order.buyerId, 'Debit', `Order payment: ${order.commodity}`, order.amount);
+  }
+  
+  setAppState(state);
+  return newOrder;
+};
+
 // Helper: Update order status
 export const updateOrderStatus = (orderId: string, status: import('@/types').OrderStatus, evidence?: import('@/types').OrderEvidence): void => {
   const state = getAppState();
@@ -340,6 +366,7 @@ export const updateOrderStatus = (orderId: string, status: import('@/types').Ord
   if (index !== -1) {
     const now = new Date().toISOString();
     const order = state.orders[index];
+    const previousStatus = order.status;
     
     state.orders[index] = {
       ...order,
@@ -350,6 +377,47 @@ export const updateOrderStatus = (orderId: string, status: import('@/types').Ord
       ...(status === 'Delivered' && { deliveredAt: now }),
       ...(evidence && { evidence }),
     };
+    
+    // Handle wallet updates based on status changes
+    if (status === 'Accepted' && previousStatus === 'Pending') {
+      // Order accepted - no wallet change yet (payment still held)
+    } else if (status === 'Delivered' && previousStatus !== 'Delivered') {
+      // Order delivered - transfer funds from buyer pending to farmer
+      const buyerWallet = state.wallets.find(w => w.userId === order.buyerId);
+      const farmerWallet = state.wallets.find(w => w.userId === order.farmerId);
+      
+      if (buyerWallet && buyerWallet.pending >= order.amount) {
+        // Remove from buyer pending
+        buyerWallet.pending -= order.amount;
+        
+        // Add to farmer pending (will become available after confirmation)
+        if (farmerWallet) {
+          farmerWallet.pending += order.amount;
+        } else {
+          // Create wallet if doesn't exist
+          state.wallets.push({
+            userId: order.farmerId,
+            available: 0,
+            pending: order.amount,
+            currency: '₦',
+          });
+        }
+        
+        // Add transaction records
+        addTransaction(order.buyerId, 'Debit', `Payment released: ${order.commodity}`, order.amount);
+        addTransaction(order.farmerId, 'Credit', `Payment received: ${order.commodity}`, order.amount);
+      }
+    } else if (status === 'Rejected' && previousStatus === 'Pending') {
+      // Order rejected - refund buyer
+      const buyerWallet = state.wallets.find(w => w.userId === order.buyerId);
+      if (buyerWallet && buyerWallet.pending >= order.amount) {
+        buyerWallet.pending -= order.amount;
+        buyerWallet.available += order.amount;
+        
+        addTransaction(order.buyerId, 'Credit', `Refund: ${order.commodity} order rejected`, order.amount);
+      }
+    }
+    
     setAppState(state);
   }
 };
@@ -403,6 +471,28 @@ export const addWithdrawal = (userId: string, amount: number, bankName: string, 
   state.transactions.unshift(newTransaction);
   
   setAppState(state);
+};
+
+// Helper: Confirm delivery (buyer confirms receipt, moves funds from farmer pending to available)
+export const confirmDelivery = (orderId: string): void => {
+  const state = getAppState();
+  const order = state.orders.find(o => o.id === orderId);
+  
+  if (!order || order.status !== 'Delivered') {
+    return; // Can only confirm delivered orders
+  }
+  
+  const farmerWallet = state.wallets.find(w => w.userId === order.farmerId);
+  if (farmerWallet && farmerWallet.pending >= order.amount) {
+    // Move from pending to available
+    farmerWallet.pending -= order.amount;
+    farmerWallet.available += order.amount;
+    
+    // Add transaction
+    addTransaction(order.farmerId, 'Credit', `Payment confirmed: ${order.commodity}`, order.amount);
+    
+    setAppState(state);
+  }
 };
 
 // Helper: Update KYC status

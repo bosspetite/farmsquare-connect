@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, User, Package, ShoppingCart } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { Modal } from '@/components/ui/Modal';
-import { getAppState, formatNaira, generateId } from '@/lib/store';
+import { getAppState, formatNaira, addOrder, setAppState, getWalletByUserId } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -30,11 +30,32 @@ const BuyerListingDetail = () => {
   const handleOrder = () => {
     if (!user || !quantity) return;
     const qty = parseInt(quantity);
+    
+    // Validate quantity
+    if (qty <= 0 || qty > listing.quantityKg) {
+      toast({ 
+        title: 'Invalid quantity', 
+        description: `Please enter a quantity between 1 and ${listing.quantityKg}kg`,
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Check buyer wallet balance
+    const buyerWallet = state.wallets.find(w => w.userId === user.id);
     const amount = qty * listing.pricePerKg;
     
-    // Add order to state
-    const newOrder = {
-      id: `order_${generateId()}`,
+    if (!buyerWallet || buyerWallet.available < amount) {
+      toast({ 
+        title: 'Insufficient balance', 
+        description: 'Please add funds to your wallet',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Use shared store helper to add order (handles wallet updates)
+    addOrder({
       buyerId: user.id,
       buyerName: user.name,
       farmerId: listing.farmerId,
@@ -46,11 +67,17 @@ const BuyerListingDetail = () => {
       amount,
       status: 'Pending' as const,
       pickupLocation: listing.locationLabel,
-      createdAt: new Date().toISOString(),
-    };
+    });
     
-    state.orders.unshift(newOrder);
-    localStorage.setItem('farmsquare_state', JSON.stringify(state));
+    // Update listing quantity
+    const listingIndex = state.listings.findIndex(l => l.id === listing.id);
+    if (listingIndex !== -1) {
+      state.listings[listingIndex].quantityKg -= qty;
+      if (state.listings[listingIndex].quantityKg <= 0) {
+        state.listings[listingIndex].status = 'Sold';
+      }
+      setAppState(state);
+    }
     
     setShowCheckout(false);
     toast({ title: 'Order placed successfully!' });

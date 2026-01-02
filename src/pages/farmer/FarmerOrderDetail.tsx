@@ -52,8 +52,26 @@ const FarmerOrderDetail = () => {
     const nextStatus = getNextStatus();
     if (nextStatus) {
       updateOrderStatus(order.id, nextStatus);
-      toast({ title: 'Order status updated' });
-      window.location.reload();
+      toast({ 
+        title: 'Order status updated',
+        description: nextStatus === 'Delivered' ? 'Waiting for buyer confirmation to release payment.' : undefined
+      });
+      // Use setTimeout to allow state to update before reload
+      setTimeout(() => window.location.reload(), 100);
+    }
+  };
+  
+  const handleAccept = () => {
+    updateOrderStatus(order.id, 'Accepted');
+    toast({ title: 'Order accepted!' });
+    setTimeout(() => window.location.reload(), 100);
+  };
+  
+  const handleReject = () => {
+    if (window.confirm('Are you sure you want to reject this order? The buyer will be refunded.')) {
+      updateOrderStatus(order.id, 'Rejected');
+      toast({ title: 'Order rejected. Buyer has been refunded.' });
+      setTimeout(() => window.location.reload(), 100);
     }
   };
 
@@ -126,8 +144,24 @@ const FarmerOrderDetail = () => {
           </div>
         )}
 
-        {/* Action Button */}
-        {nextStatus && (
+        {/* Action Buttons */}
+        {order.status === 'Pending' && (
+          <div className="space-y-3">
+            <button
+              onClick={handleAccept}
+              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
+            >
+              Accept Order
+            </button>
+            <button
+              onClick={handleReject}
+              className="w-full py-4 bg-destructive/10 text-destructive rounded-xl font-medium border border-destructive/20"
+            >
+              Reject Order
+            </button>
+          </div>
+        )}
+        {nextStatus && order.status !== 'Pending' && (
           <button
             onClick={handleProgress}
             className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
