@@ -48,6 +48,8 @@ jobs:
           ls -la dist/
           echo "Checking assets folder:"
           ls -la dist/assets/ || echo "Assets folder not found!"
+          echo "Verifying index.html paths:"
+          cat dist/index.html | grep -E "(src=|href=)" || echo "No src/href found"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
