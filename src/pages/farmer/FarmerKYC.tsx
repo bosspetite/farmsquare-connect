@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Camera, CreditCard, CheckCircle, AlertCircle } from 'lucide-react';
+import { Camera, CreditCard, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { Stepper } from '@/components/ui/Stepper';
 import { FileUploader } from '@/components/ui/FileUploader';
@@ -12,20 +12,40 @@ const steps = [{ label: 'Selfie' }, { label: 'ID' }, { label: 'Review' }];
 const FarmerKYC = () => {
   const { user } = useAuth();
   const kycData = user ? getKYCByUserId(user.id) : null;
-  const [step, setStep] = useState(kycData?.status === 'IN_REVIEW' || kycData?.status === 'APPROVED' ? 2 : 0);
+  
+  // Determine initial step based on KYC status
+  const getInitialStep = () => {
+    if (!kycData) return 0; // No KYC data = start from beginning
+    if (kycData.status === 'APPROVED') return 2; // Show approved message
+    if (kycData.status === 'REJECTED') return 0; // Start over if rejected
+    if (kycData.status === 'IN_REVIEW') return 2; // Show review status
+    return 0; // NOT_STARTED = start from beginning
+  };
+  
+  const [step, setStep] = useState(getInitialStep());
   const [selfie, setSelfie] = useState<string[]>(kycData?.selfiePhoto ? [kycData.selfiePhoto] : []);
   const [idPhoto, setIdPhoto] = useState<string[]>(kycData?.idPhoto ? [kycData.idPhoto] : []);
 
   const handleSubmit = () => {
     if (!user) return;
+    if (!selfie[0] || !idPhoto[0]) {
+      toast({ 
+        title: 'Missing documents', 
+        description: 'Please upload both selfie and ID photo',
+        variant: 'destructive' 
+      });
+      return;
+    }
     updateKYCStatus(user.id, 'IN_REVIEW', selfie[0], idPhoto[0]);
     setStep(2);
-    toast({ title: 'KYC submitted for review' });
+    toast({ title: 'KYC submitted for review', description: 'Your documents are being verified. This usually takes 24-48 hours.' });
   };
 
+  // Only show approved if status is explicitly APPROVED
   const isApproved = kycData?.status === 'APPROVED';
   const isRejected = kycData?.status === 'REJECTED';
   const isInReview = kycData?.status === 'IN_REVIEW';
+  const isNotStarted = !kycData || kycData.status === 'NOT_STARTED';
 
   return (
     <FarmerLayout>
@@ -60,15 +80,36 @@ const FarmerKYC = () => {
 
             {step === 0 && (
               <div className="space-y-4">
+                <div className="farm-card bg-primary/5 border-primary/20">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-foreground">
+                      <p className="font-medium mb-1">Why we need your verification</p>
+                      <p className="text-muted-foreground">
+                        KYC verification is required to enable withdrawals and ensure secure transactions on FarmSquare.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="farm-card">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                       <Camera className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-foreground">Take a Selfie</h3>
-                      <p className="text-sm text-muted-foreground">Clear photo of your face</p>
+                      <h3 className="font-semibold text-foreground">Step 1: Take a Selfie</h3>
+                      <p className="text-sm text-muted-foreground">Clear, front-facing photo of your face</p>
                     </div>
+                  </div>
+                  <div className="mb-4 p-3 bg-muted/50 rounded-xl">
+                    <p className="text-xs font-medium text-foreground mb-2">Requirements:</p>
+                    <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                      <li>Face should be clearly visible</li>
+                      <li>Good lighting</li>
+                      <li>No sunglasses or face coverings</li>
+                      <li>Look directly at the camera</li>
+                    </ul>
                   </div>
                   <FileUploader files={selfie} onFilesChange={setSelfie} maxFiles={1} />
                 </div>
@@ -77,7 +118,7 @@ const FarmerKYC = () => {
                   disabled={selfie.length === 0}
                   className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
                 >
-                  Continue
+                  Continue to ID Upload
                 </button>
               </div>
             )}
@@ -90,19 +131,74 @@ const FarmerKYC = () => {
                       <CreditCard className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-foreground">Upload ID</h3>
-                      <p className="text-sm text-muted-foreground">NIN, Voter's Card, or Driver's License</p>
+                      <h3 className="font-semibold text-foreground">Step 2: Upload Government ID</h3>
+                      <p className="text-sm text-muted-foreground">Upload a valid government-issued ID</p>
                     </div>
                   </div>
+                  
+                  <div className="mb-4 p-4 bg-muted/50 rounded-xl">
+                    <p className="text-xs font-medium text-foreground mb-3">Accepted ID Types:</p>
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-farm-success flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">National Identification Number (NIN)</p>
+                          <p className="text-xs text-muted-foreground">NIN slip or card</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-farm-success flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">Voter's Card</p>
+                          <p className="text-xs text-muted-foreground">Permanent Voter's Card (PVC)</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-farm-success flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">Driver's License</p>
+                          <p className="text-xs text-muted-foreground">Valid Nigerian driver's license</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-farm-success flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">International Passport</p>
+                          <p className="text-xs text-muted-foreground">Valid Nigerian passport</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-farm-warning/10 border border-farm-warning/20 rounded-xl">
+                    <p className="text-xs font-medium text-foreground mb-2">Photo Requirements:</p>
+                    <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                      <li>Photo should be clear and readable</li>
+                      <li>All text and numbers must be visible</li>
+                      <li>ID should not be expired</li>
+                      <li>Take photo in good lighting</li>
+                      <li>Ensure ID covers the entire frame</li>
+                    </ul>
+                  </div>
+
                   <FileUploader files={idPhoto} onFilesChange={setIdPhoto} maxFiles={1} />
                 </div>
-                <button
-                  onClick={handleSubmit}
-                  disabled={idPhoto.length === 0}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
-                >
-                  Submit for Review
-                </button>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(0)}
+                    className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-medium"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={idPhoto.length === 0}
+                    className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
+                  >
+                    Submit for Review
+                  </button>
+                </div>
               </div>
             )}
 

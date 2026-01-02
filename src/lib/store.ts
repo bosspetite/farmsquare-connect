@@ -523,7 +523,7 @@ export const updateKYCStatus = (userId: string, status: import('@/types').KYCSta
     status,
     selfiePhoto,
     idPhoto,
-    submittedAt: new Date().toISOString(),
+    submittedAt: status === 'IN_REVIEW' || status === 'APPROVED' ? new Date().toISOString() : undefined,
   };
   
   if (index !== -1) {
@@ -532,10 +532,16 @@ export const updateKYCStatus = (userId: string, status: import('@/types').KYCSta
     state.kycData.push(kycRecord);
   }
   
-  // Also update user's KYC status
+  // Also update user's KYC status in farmers array
   const farmerIndex = state.farmers.findIndex(f => f.id === userId);
   if (farmerIndex !== -1) {
     state.farmers[farmerIndex].kycStatus = status;
+  }
+  
+  // Also update buyer's KYC status if exists
+  const buyerIndex = state.buyers.findIndex(b => b.id === userId);
+  if (buyerIndex !== -1) {
+    state.buyers[buyerIndex].kycStatus = status;
   }
   
   setAppState(state);
