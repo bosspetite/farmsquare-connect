@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, User, Package, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, MapPin, User, Package, ShoppingCart, ZoomIn, X } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { Modal } from '@/components/ui/Modal';
 import { getAppState, formatNaira, addOrder, setAppState, getWalletByUserId } from '@/lib/store';
@@ -16,6 +16,8 @@ const BuyerListingDetail = () => {
   
   const [showCheckout, setShowCheckout] = useState(false);
   const [quantity, setQuantity] = useState('');
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   if (!listing) {
     return (
