@@ -98,22 +98,31 @@ const BuyerListingDetail = () => {
           {/* Main Image */}
           <div className="w-full h-80 rounded-2xl bg-muted flex items-center justify-center overflow-hidden relative group">
             {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
-              <img 
-                src={listing.photos[0]} 
-                alt={listing.commodity} 
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent && !parent.querySelector('.fallback-emoji')) {
-                    const fallback = document.createElement('div');
-                    fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5';
-                    const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾';
-                    fallback.innerHTML = `<span class="text-7xl">${emoji}</span>`;
-                    parent.appendChild(fallback);
-                  }
-                }}
-              />
+              <>
+                <img 
+                  src={listing.photos[0]} 
+                  alt={listing.commodity} 
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const parent = e.currentTarget.parentElement;
+                    if (parent && !parent.querySelector('.fallback-emoji')) {
+                      const fallback = document.createElement('div');
+                      fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5';
+                      const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾';
+                      fallback.innerHTML = `<span class="text-7xl">${emoji}</span>`;
+                      parent.appendChild(fallback);
+                    }
+                  }}
+                />
+                {/* Image count badge */}
+                {listing.photos.length > 1 && (
+                  <div className="absolute top-4 right-4 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-lg text-sm font-medium text-foreground shadow-lg">
+                    {listing.photos.length} photos
+                  </div>
+                )}
+              </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
                 <span className="text-7xl">
@@ -122,6 +131,35 @@ const BuyerListingDetail = () => {
               </div>
             )}
           </div>
+          
+          {/* Thumbnail Gallery */}
+          {listing.photos && listing.photos.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {listing.photos.map((photo, index) => (
+                <div
+                  key={index}
+                  className="w-20 h-20 rounded-xl bg-muted flex-shrink-0 overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer"
+                  onClick={() => {
+                    // Scroll main image into view and could swap images
+                    const mainImg = document.querySelector('.main-listing-image') as HTMLImageElement;
+                    if (mainImg) {
+                      mainImg.src = photo;
+                    }
+                  }}
+                >
+                  <img 
+                    src={photo} 
+                    alt={`${listing.commodity} ${index + 1}`}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           
           {/* Thumbnail Gallery */}
           {listing.photos && listing.photos.length > 1 && (

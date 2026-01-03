@@ -30,19 +30,29 @@ const BuyerMarketplace = () => {
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filter listings
+  // Filter listings with enhanced search
   const filteredListings = useMemo(() => {
     let results = state.listings.filter(l => {
       // Only active listings
       if (l.status !== 'Active') return false;
       
-      // Search filter (commodity, farmer name, region)
+      // Enhanced search filter (commodity, farmer name, region, location)
       if (search) {
-        const searchLower = search.toLowerCase();
-        const matchesCommodity = l.commodity.toLowerCase().includes(searchLower);
-        const matchesFarmer = l.farmerName.toLowerCase().includes(searchLower);
-        const matchesRegion = l.region.toLowerCase().includes(searchLower);
-        if (!matchesCommodity && !matchesFarmer && !matchesRegion) return false;
+        const searchLower = search.toLowerCase().trim();
+        const searchTerms = searchLower.split(/\s+/); // Split into words
+        
+        // Check if ALL search terms match (AND logic)
+        const matchesAll = searchTerms.every(term => {
+          const matchesCommodity = l.commodity.toLowerCase().includes(term);
+          const matchesFarmer = l.farmerName.toLowerCase().includes(term);
+          const matchesRegion = l.region.toLowerCase().includes(term);
+          const matchesLocation = l.locationLabel.toLowerCase().includes(term);
+          const matchesGrade = `grade ${l.grade}`.includes(term);
+          
+          return matchesCommodity || matchesFarmer || matchesRegion || matchesLocation || matchesGrade;
+        });
+        
+        if (!matchesAll) return false;
       }
       
       // Commodity filter
@@ -110,23 +120,29 @@ const BuyerMarketplace = () => {
           </button>
         </div>
 
-        {/* Search Bar */}
+        {/* Enhanced Search Bar */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by produce, farmer, or region..."
-            className="w-full pl-12 pr-4 py-4 bg-card border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-base"
+            placeholder="Search produce, farmer, region, location, or grade (e.g., 'Maize Kaduna Grade A')..."
+            className="w-full pl-12 pr-12 py-4 bg-card border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-base transition-all"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground hover:text-foreground"
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Clear search"
             >
               <X className="w-5 h-5" />
             </button>
+          )}
+          {search && (
+            <div className="absolute left-12 top-full mt-1 text-xs text-muted-foreground">
+              {filteredListings.length} result{filteredListings.length !== 1 ? 's' : ''} found
+            </div>
           )}
         </div>
 
@@ -220,16 +236,26 @@ const BuyerMarketplace = () => {
         )}
 
         {/* Sort & Results Count */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{filteredListings.length}</span> listing{filteredListings.length !== 1 ? 's' : ''} found
-          </p>
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground text-lg">{filteredListings.length}</span> listing{filteredListings.length !== 1 ? 's' : ''} found
+            </p>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="text-xs text-primary hover:underline mt-1"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <ArrowUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="px-3 py-2 bg-card border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="flex-1 sm:flex-none px-3 py-2 bg-card border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {sortOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -303,10 +329,10 @@ const BuyerMarketplace = () => {
                 </div>
               </div>
               
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-display font-bold text-lg text-foreground mb-1">{listing.commodity}</h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-display font-bold text-lg text-foreground mb-1 truncate">{listing.commodity}</h3>
                     <p className="text-sm text-muted-foreground">{listing.quantityKg.toLocaleString()}kg available</p>
                   </div>
                 </div>
@@ -314,16 +340,19 @@ const BuyerMarketplace = () => {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="w-4 h-4 flex-shrink-0" />
                   <span className="truncate">{listing.region}</span>
+                  {listing.locationLabel && listing.locationLabel !== `${listing.region} Farm` && (
+                    <span className="text-xs">• {listing.locationLabel}</span>
+                  )}
                 </div>
                 
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <div>
+                <div className="flex items-center justify-between pt-3 border-t border-border">
+                  <div className="flex-1 min-w-0">
                     <p className="text-xl font-bold text-primary">{formatNaira(listing.pricePerKg)}/kg</p>
                     <p className="text-xs text-muted-foreground">Total: {formatNaira(listing.quantityKg * listing.pricePerKg)}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">by</p>
-                    <p className="text-sm font-medium text-foreground">{listing.farmerName}</p>
+                  <div className="text-right ml-3 flex-shrink-0">
+                    <p className="text-xs text-muted-foreground">Farmer</p>
+                    <p className="text-sm font-medium text-foreground truncate max-w-[100px]">{listing.farmerName}</p>
                   </div>
                 </div>
               </div>
