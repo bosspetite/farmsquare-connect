@@ -115,7 +115,7 @@ const BuyerListingDetail = () => {
                     if (parent && !parent.querySelector('.fallback-emoji')) {
                       const fallback = document.createElement('div');
                       fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5';
-                      const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾';
+                      const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : listing.commodity === 'Sorghum' ? '🌾' : '🌾';
                       fallback.innerHTML = `<span class="text-7xl">${emoji}</span>`;
                       parent.appendChild(fallback);
                     }
@@ -138,7 +138,7 @@ const BuyerListingDetail = () => {
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
                 <span className="text-7xl">
-                  {listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : '🌾'}
+                  {listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : listing.commodity === 'Sorghum' ? '🌾' : '🌾'}
                 </span>
               </div>
             )}

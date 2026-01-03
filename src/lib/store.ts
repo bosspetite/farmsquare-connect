@@ -8,6 +8,8 @@ export const generateId = () => Math.random().toString(36).substring(2, 11);
 // Initial seed data
 const createSeedData = (): AppState => {
   const farmerId = 'farmer_001';
+  const farmerId2 = 'farmer_002';
+  const farmerId3 = 'farmer_003';
   const buyerId = 'buyer_001';
   const agentId = 'agent_001';
   const adminId = 'admin_001';
@@ -23,6 +25,24 @@ const createSeedData = (): AppState => {
         region: 'Kaduna',
         kycStatus: 'NOT_STARTED', // Changed from APPROVED to NOT_STARTED
         createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: farmerId2,
+        name: 'Hassan Musa',
+        phone: '+2348023456789',
+        role: 'farmer',
+        region: 'Benue',
+        kycStatus: 'APPROVED',
+        createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: farmerId3,
+        name: 'Amina Usman',
+        phone: '+2348034567890',
+        role: 'farmer',
+        region: 'Sokoto',
+        kycStatus: 'APPROVED',
+        createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ],
     buyers: [
