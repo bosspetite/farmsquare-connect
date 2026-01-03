@@ -36,20 +36,24 @@ const BuyerMarketplace = () => {
       // Only active listings
       if (l.status !== 'Active') return false;
       
-      // Enhanced search filter (commodity, farmer name, region, location)
+      // Enhanced search filter (commodity, farmer name, region, location, grade, price, quantity)
       if (search) {
         const searchLower = search.toLowerCase().trim();
-        const searchTerms = searchLower.split(/\s+/); // Split into words
+        const searchTerms = searchLower.split(/\s+/).filter(term => term.length > 0); // Split into words, remove empty
         
-        // Check if ALL search terms match (AND logic)
+        if (searchTerms.length === 0) return true;
+        
+        // Check if ALL search terms match somewhere (AND logic across terms)
         const matchesAll = searchTerms.every(term => {
           const matchesCommodity = l.commodity.toLowerCase().includes(term);
           const matchesFarmer = l.farmerName.toLowerCase().includes(term);
           const matchesRegion = l.region.toLowerCase().includes(term);
           const matchesLocation = l.locationLabel.toLowerCase().includes(term);
-          const matchesGrade = `grade ${l.grade}`.includes(term);
+          const matchesGrade = `grade ${l.grade}`.toLowerCase().includes(term);
+          const matchesPrice = formatNaira(l.pricePerKg).toLowerCase().includes(term);
+          const matchesQuantity = l.quantityKg.toString().includes(term);
           
-          return matchesCommodity || matchesFarmer || matchesRegion || matchesLocation || matchesGrade;
+          return matchesCommodity || matchesFarmer || matchesRegion || matchesLocation || matchesGrade || matchesPrice || matchesQuantity;
         });
         
         if (!matchesAll) return false;
@@ -139,12 +143,14 @@ const BuyerMarketplace = () => {
               <X className="w-5 h-5" />
             </button>
           )}
-          {search && (
-            <div className="absolute left-12 top-full mt-1 text-xs text-muted-foreground">
-              {filteredListings.length} result{filteredListings.length !== 1 ? 's' : ''} found
-            </div>
-          )}
         </div>
+        
+        {/* Search Results Count */}
+        {search && (
+          <div className="text-sm text-muted-foreground">
+            Found <span className="font-semibold text-foreground">{filteredListings.length}</span> listing{filteredListings.length !== 1 ? 's' : ''} matching "{search}"
+          </div>
+        )}
 
         {/* Quick Filters */}
         <div className="space-y-3">

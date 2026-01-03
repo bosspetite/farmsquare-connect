@@ -98,11 +98,14 @@ const BuyerListingDetail = () => {
         {/* Image Gallery */}
         <div className="space-y-3">
           {/* Main Image */}
-          <div className="w-full h-80 rounded-2xl bg-muted flex items-center justify-center overflow-hidden relative group">
-            {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
+          <div 
+            className="w-full h-80 rounded-2xl bg-muted flex items-center justify-center overflow-hidden relative group cursor-pointer"
+            onClick={() => listing.photos && listing.photos.length > 0 && setShowImageModal(true)}
+          >
+            {listing.photos && listing.photos.length > 0 && listing.photos[selectedImageIndex] ? (
               <>
                 <img 
-                  src={listing.photos[0]} 
+                  src={listing.photos[selectedImageIndex]} 
                   alt={listing.commodity} 
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
@@ -121,9 +124,16 @@ const BuyerListingDetail = () => {
                 {/* Image count badge */}
                 {listing.photos.length > 1 && (
                   <div className="absolute top-4 right-4 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-lg text-sm font-medium text-foreground shadow-lg">
-                    {listing.photos.length} photos
+                    {selectedImageIndex + 1} / {listing.photos.length}
                   </div>
                 )}
+                {/* Zoom icon on hover */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <div className="px-4 py-2 bg-background/90 backdrop-blur-sm rounded-xl flex items-center gap-2">
+                    <ZoomIn className="w-5 h-5 text-foreground" />
+                    <span className="text-sm font-medium text-foreground">Click to view full size</span>
+                  </div>
+                </div>
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
@@ -140,14 +150,12 @@ const BuyerListingDetail = () => {
               {listing.photos.map((photo, index) => (
                 <div
                   key={index}
-                  className="w-20 h-20 rounded-xl bg-muted flex-shrink-0 overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer"
-                  onClick={() => {
-                    // Scroll main image into view and could swap images
-                    const mainImg = document.querySelector('.main-listing-image') as HTMLImageElement;
-                    if (mainImg) {
-                      mainImg.src = photo;
-                    }
-                  }}
+                  className={`w-20 h-20 rounded-xl bg-muted flex-shrink-0 overflow-hidden border-2 transition-all cursor-pointer ${
+                    selectedImageIndex === index 
+                      ? 'border-primary scale-105' 
+                      : 'border-transparent hover:border-primary/50'
+                  }`}
+                  onClick={() => setSelectedImageIndex(index)}
                 >
                   <img 
                     src={photo} 
@@ -162,25 +170,58 @@ const BuyerListingDetail = () => {
               ))}
             </div>
           )}
-          
-          {/* Thumbnail Gallery */}
-          {listing.photos && listing.photos.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {listing.photos.slice(1).map((photo, index) => (
-                <div key={index} className="w-20 h-20 rounded-xl bg-muted flex-shrink-0 overflow-hidden">
-                  <img 
-                    src={photo} 
-                    alt={`${listing.commodity} ${index + 2}`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
+
+        {/* Image Lightbox Modal */}
+        {showImageModal && listing.photos && listing.photos.length > 0 && (
+          <div 
+            className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
+            onClick={() => setShowImageModal(false)}
+          >
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-background/20 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/40 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="relative max-w-4xl w-full max-h-[90vh] flex items-center justify-center">
+              <img 
+                src={listing.photos[selectedImageIndex]} 
+                alt={listing.commodity}
+                className="max-w-full max-h-[90vh] object-contain rounded-xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+              
+              {listing.photos.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : listing.photos.length - 1));
+                    }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-background/20 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/40 transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImageIndex((prev) => (prev < listing.photos.length - 1 ? prev + 1 : 0));
+                    }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-background/20 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/40 transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5 rotate-180" />
+                  </button>
+                  
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-background/20 backdrop-blur-sm rounded-xl text-sm text-foreground">
+                    {selectedImageIndex + 1} / {listing.photos.length}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Details */}
         <div className="farm-card">
