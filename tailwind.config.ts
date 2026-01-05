@@ -103,8 +103,8 @@ export default {
           to: { transform: "translateX(0)" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px hsl(122 85% 50% / 0.3)" },
-          "50%": { boxShadow: "0 0 40px hsl(122 85% 50% / 0.5)" },
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.9" },
         },
         "bounce-subtle": {
           "0%, 100%": { transform: "translateY(0)" },
@@ -121,9 +121,9 @@ export default {
         "bounce-subtle": "bounce-subtle 2s ease-in-out infinite",
       },
       boxShadow: {
-        glow: "0 0 40px hsl(122 85% 50% / 0.2)",
-        "glow-lg": "0 0 60px hsl(122 85% 50% / 0.3)",
-        card: "0 4px 24px -4px hsl(0 0% 0% / 0.4)",
+        glow: "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+        "glow-lg": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        card: "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
       },
     },
   },

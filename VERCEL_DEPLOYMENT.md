@@ -89,3 +89,5 @@ Your app should now work on both platforms:
 - **GitHub Pages**: https://bosspetite.github.io/farmsquare-connect/
 - **Vercel**: Your Vercel URL (after deployment)
 
+
+

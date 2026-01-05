@@ -186,3 +186,5 @@ app.post('/api/upload-image', async (req, res) => {
 2. **For production**: Set up cloud storage when you have a backend
 3. **No code changes needed** in components - they'll work with URLs automatically!
 
+
+

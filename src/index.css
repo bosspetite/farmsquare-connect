@@ -2,83 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
-/* FarmSquare Design System - Dark green agro marketplace theme */
+/* FarmSquare Design System - Clean light theme */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
 @layer base {
   :root {
-    /* Core palette - Dark forest green */
-    --background: 120 30% 6%;
-    --foreground: 0 0% 98%;
+    /* Core palette - Light theme */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
 
     /* Cards and surfaces */
-    --card: 120 28% 9%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 120 28% 9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Primary - Vibrant green accent */
-    --primary: 122 85% 50%;
-    --primary-foreground: 120 30% 6%;
+    /* Primary - Muted green accent */
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Subtle green tint */
-    --secondary: 120 20% 14%;
-    --secondary-foreground: 0 0% 90%;
+    /* Secondary - Light gray */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    /* Muted - Soft green gray */
-    --muted: 120 15% 18%;
-    --muted-foreground: 120 10% 60%;
+    /* Muted - Soft gray */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    /* Accent - Earthy brown from logo */
-    --accent: 30 40% 30%;
-    --accent-foreground: 0 0% 98%;
+    /* Accent - Subtle gray */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
 
     /* Destructive */
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
     /* Borders and inputs */
-    --border: 120 20% 20%;
-    --input: 120 20% 15%;
-    --ring: 122 85% 50%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 142 71% 45%;
 
     --radius: 1rem;
 
     /* Custom FarmSquare tokens */
-    --farm-dark: 120 30% 6%;
-    --farm-surface: 120 28% 9%;
-    --farm-accent: 122 85% 50%;
-    --farm-accent-glow: 122 90% 60%;
-    --farm-brown: 30 50% 35%;
-    --farm-brown-light: 30 40% 50%;
-    --farm-success: 140 70% 45%;
-    --farm-warning: 45 90% 50%;
-    --farm-info: 200 80% 55%;
+    --farm-dark: 222 47% 11%;
+    --farm-surface: 0 0% 100%;
+    --farm-accent: 142 71% 45%;
+    --farm-accent-glow: 142 71% 50%;
+    --farm-brown: 30 40% 30%;
+    --farm-brown-light: 30 30% 50%;
+    --farm-success: 142 71% 45%;
+    --farm-warning: 38 92% 50%;
+    --farm-info: 199 89% 48%;
 
-    /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(120 30% 8%) 0%, hsl(120 25% 12%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(120 28% 10%) 0%, hsl(120 28% 8%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(122 85% 50%) 0%, hsl(140 80% 45%) 100%);
+    /* Gradients - Removed green gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 100%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(142 71% 45%) 0%, hsl(142 71% 50%) 100%);
 
-    /* Shadows */
-    --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.4);
-    --shadow-glow: 0 0 40px hsl(122 85% 50% / 0.2);
-    --shadow-button: 0 4px 16px hsl(122 85% 50% / 0.3);
+    /* Shadows - Subtle, no green glow */
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-glow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    --shadow-button: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 
-    /* Sidebar */
-    --sidebar-background: 120 28% 9%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 122 85% 50%;
-    --sidebar-primary-foreground: 120 30% 6%;
-    --sidebar-accent: 120 20% 14%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 120 20% 20%;
-    --sidebar-ring: 122 85% 50%;
+    /* Sidebar - Light theme */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 142 71% 45%;
   }
 
   .dark {
-    /* Same as root - app is dark by default */
+    /* Same as root - app is light by default */
   }
 }
 
@@ -100,8 +100,7 @@
 @layer components {
   /* Card styles */
   .farm-card {
-    @apply bg-card rounded-2xl border border-border/50 p-5;
-    background: var(--gradient-card);
+    @apply bg-card rounded-2xl border border-border p-5;
     box-shadow: var(--shadow-card);
   }
 
@@ -110,17 +109,17 @@
   }
 
   .farm-card-interactive:hover {
-    @apply border-primary/30;
-    box-shadow: var(--shadow-glow);
+    @apply border-border;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
-  /* Button glow effect */
+  /* Button - No glow effect */
   .btn-glow {
     box-shadow: var(--shadow-button);
   }
 
   .btn-glow:hover {
-    box-shadow: 0 6px 24px hsl(122 85% 50% / 0.4);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
   /* Status badges */
@@ -157,7 +156,7 @@
 
   /* Wallet card gradient */
   .wallet-gradient {
-    background: linear-gradient(135deg, hsl(120 25% 12%) 0%, hsl(122 40% 18%) 100%);
+    background: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
   }
 }
 

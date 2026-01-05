@@ -61,3 +61,5 @@ If none of the above works:
 2. If the file opens, the issue is just the sidebar display
 3. You can still work on files using **Ctrl+P** to search
 
+
+
