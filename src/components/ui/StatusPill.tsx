@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-type StatusType = 'Active' | 'Paused' | 'Pending' | 'Accepted' | 'Rejected' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Submitted' | 'InReview' | 'Paid' | 'APPROVED' | 'NOT_STARTED' | 'Sold';
+type StatusType = 'Draft' | 'Active' | 'Paused' | 'SoldOut' | 'Sold' | 'Archived' | 'Pending' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Submitted' | 'InReview' | 'Paid' | 'APPROVED' | 'NOT_STARTED';
 
 interface StatusPillProps {
   status: StatusType;
@@ -8,11 +8,16 @@ interface StatusPillProps {
 }
 
 const statusStyles: Record<StatusType, string> = {
+  Draft: 'bg-muted text-muted-foreground border border-border',
   Active: 'status-active',
   Paused: 'status-paused',
+  SoldOut: 'bg-farm-warning/20 text-farm-warning border border-farm-warning/30',
+  Sold: 'status-delivered',
+  Archived: 'bg-muted/50 text-muted-foreground border border-border',
   Pending: 'status-pending',
   Accepted: 'bg-farm-info/20 text-farm-info border border-farm-info/30',
   Rejected: 'status-rejected',
+  Processing: 'bg-farm-info/20 text-farm-info border border-farm-info/30',
   PickupScheduled: 'bg-farm-info/20 text-farm-info border border-farm-info/30',
   InTransit: 'bg-farm-warning/20 text-farm-warning border border-farm-warning/30',
   Delivered: 'status-delivered',
@@ -21,16 +26,20 @@ const statusStyles: Record<StatusType, string> = {
   Paid: 'status-delivered',
   APPROVED: 'status-delivered',
   NOT_STARTED: 'status-paused',
-  Sold: 'status-delivered',
 };
 
 const statusLabels: Record<StatusType, string> = {
+  Draft: 'Draft',
   Active: 'Active',
   Paused: 'Paused',
+  SoldOut: 'Sold Out',
+  Sold: 'Sold',
+  Archived: 'Archived',
   Pending: 'Pending',
   Accepted: 'Accepted',
   Rejected: 'Rejected',
-  PickupScheduled: 'Pickup Scheduled',
+  Processing: 'Processing',
+  PickupScheduled: 'Ready for Pickup',
   InTransit: 'In Transit',
   Delivered: 'Delivered',
   Submitted: 'Submitted',
@@ -38,7 +47,6 @@ const statusLabels: Record<StatusType, string> = {
   Paid: 'Paid',
   APPROVED: 'Approved',
   NOT_STARTED: 'Not Started',
-  Sold: 'Sold',
 };
 
 export const StatusPill: React.FC<StatusPillProps> = ({ status, className }) => {

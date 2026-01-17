@@ -1,4 +1,5 @@
-import { AppState, Farmer, Buyer, Listing, Order, Transaction, Wallet, MarketPriceIntel, KYCData } from '@/types';
+import { AppState, Farmer, Buyer, Listing, Order, Transaction, Wallet, MarketPriceIntel, KYCData, Dispute, DisputeStatus } from '@/types';
+import { getProduceImages } from '@/utils/produceImages';
 
 const STORAGE_KEY = 'farmsquare_state';
 
@@ -52,7 +53,7 @@ const createSeedData = (): AppState => {
         phone: '+2348098765432',
         role: 'buyer',
         region: 'Lagos',
-        kycStatus: 'APPROVED',
+        kycStatus: 'NOT_STARTED', // Changed to NOT_STARTED for testing KYB
         companyName: 'AgroTrade Nigeria Ltd',
         createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       },
@@ -104,7 +105,7 @@ const createSeedData = (): AppState => {
         grade: 'A',
         quantityKg: 5000,
         pricePerKg: 450,
-        photos: [],
+        photos: getProduceImages('Maize'),
         locationLabel: 'Zaria Farm Settlement',
         region: 'Kaduna',
         status: 'Active',
@@ -118,7 +119,7 @@ const createSeedData = (): AppState => {
         grade: 'B',
         quantityKg: 3000,
         pricePerKg: 280,
-        photos: [],
+        photos: getProduceImages('Cassava'),
         locationLabel: 'Zaria Farm Settlement',
         region: 'Kaduna',
         status: 'Active',
@@ -132,7 +133,7 @@ const createSeedData = (): AppState => {
         grade: 'A',
         quantityKg: 4000,
         pricePerKg: 850,
-        photos: [],
+        photos: getProduceImages('Rice'),
         locationLabel: 'Kano River Project',
         region: 'Kano',
         status: 'Active',
@@ -146,7 +147,7 @@ const createSeedData = (): AppState => {
         grade: 'A',
         quantityKg: 2500,
         pricePerKg: 550,
-        photos: [],
+        photos: getProduceImages('Yam'),
         locationLabel: 'Benue Valley Farm',
         region: 'Benue',
         status: 'Active',
@@ -160,7 +161,7 @@ const createSeedData = (): AppState => {
         grade: 'B',
         quantityKg: 3500,
         pricePerKg: 380,
-        photos: [],
+        photos: getProduceImages('Sorghum'),
         locationLabel: 'Sokoto Grain Farm',
         region: 'Sokoto',
         status: 'Active',
@@ -174,7 +175,7 @@ const createSeedData = (): AppState => {
         grade: 'B',
         quantityKg: 6000,
         pricePerKg: 420,
-        photos: [],
+        photos: getProduceImages('Maize'),
         locationLabel: 'Benue Valley Farm',
         region: 'Benue',
         status: 'Active',
@@ -298,6 +299,9 @@ const createSeedData = (): AppState => {
     kycData: [
       // No KYC data initially - farmers start with NOT_STARTED status
     ],
+    disputes: [
+      // No disputes initially
+    ],
   };
 };
 
@@ -306,7 +310,13 @@ export const getAppState = (): AppState => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const state = JSON.parse(stored);
+      // Ensure all required properties exist (migration for old data)
+      if (!state.disputes) {
+        state.disputes = [];
+        setAppState(state);
+      }
+      return state;
     }
   } catch (e) {
     console.error('Error reading state:', e);
@@ -384,9 +394,14 @@ export const getKYCByUserId = (userId: string): KYCData | undefined => {
 
 // Helper: Add new listing
 export const addListing = (listing: Omit<Listing, 'id' | 'createdAt'>): Listing => {
+  // Auto-assign images if photos array is empty
+  const photos = listing.photos && listing.photos.length > 0 
+    ? listing.photos 
+    : getProduceImages(listing.commodity);
   const state = getAppState();
   const newListing: Listing = {
     ...listing,
+    photos,
     id: `listing_${generateId()}`,
     createdAt: new Date().toISOString(),
   };
@@ -589,17 +604,31 @@ export const confirmDelivery = (orderId: string): void => {
   }
 };
 
-// Helper: Update KYC status
+// Helper: Update KYC status (legacy function for backward compatibility)
 export const updateKYCStatus = (userId: string, status: import('@/types').KYCStatus, selfiePhoto?: string, idPhoto?: string): void => {
   const state = getAppState();
   const index = state.kycData.findIndex(k => k.userId === userId);
   
+  const existingData = index !== -1 ? state.kycData[index] : null;
+  
   const kycRecord: KYCData = {
     userId,
     status,
-    selfiePhoto,
-    idPhoto,
-    submittedAt: status === 'IN_REVIEW' || status === 'APPROVED' ? new Date().toISOString() : undefined,
+    selfieFile: selfiePhoto || existingData?.selfieFile,
+    idDocumentFile: idPhoto || existingData?.idDocumentFile,
+    submittedAt: status === 'IN_REVIEW' || status === 'APPROVED' ? new Date().toISOString() : existingData?.submittedAt,
+    // Preserve existing data
+    fullName: existingData?.fullName,
+    phoneNumber: existingData?.phoneNumber,
+    dateOfBirth: existingData?.dateOfBirth,
+    address: existingData?.address,
+    idType: existingData?.idType,
+    idNumber: existingData?.idNumber,
+    // Preserve business data (for buyers - KYB)
+    businessName: existingData?.businessName,
+    businessType: existingData?.businessType,
+    businessRegistrationNumber: existingData?.businessRegistrationNumber,
+    businessDocumentFile: existingData?.businessDocumentFile,
   };
   
   if (index !== -1) {
@@ -608,7 +637,7 @@ export const updateKYCStatus = (userId: string, status: import('@/types').KYCSta
     state.kycData.push(kycRecord);
   }
   
-  // Also update user's KYC status in farmers array
+  // Also update user's KYC status in farmers/buyers arrays and currentUser
   const farmerIndex = state.farmers.findIndex(f => f.id === userId);
   if (farmerIndex !== -1) {
     state.farmers[farmerIndex].kycStatus = status;
@@ -618,6 +647,54 @@ export const updateKYCStatus = (userId: string, status: import('@/types').KYCSta
   const buyerIndex = state.buyers.findIndex(b => b.id === userId);
   if (buyerIndex !== -1) {
     state.buyers[buyerIndex].kycStatus = status;
+  }
+  
+  // Update currentUser if it's the same user
+  if (state.currentUser && state.currentUser.id === userId) {
+    state.currentUser.kycStatus = status;
+  }
+  
+  setAppState(state);
+};
+
+// Helper: Update full KYC data
+export const updateKYCData = (userId: string, kycData: Partial<KYCData>): void => {
+  const state = getAppState();
+  const index = state.kycData.findIndex(k => k.userId === userId);
+  
+  const existingData = index !== -1 ? state.kycData[index] : { userId, status: 'NOT_STARTED' as KYCStatus };
+  
+  const updatedRecord: KYCData = {
+    ...existingData,
+    ...kycData,
+    userId, // Ensure userId is not overwritten
+    submittedAt: kycData.status === 'IN_REVIEW' || kycData.status === 'APPROVED' 
+      ? (kycData.submittedAt || new Date().toISOString())
+      : existingData.submittedAt,
+  };
+  
+  if (index !== -1) {
+    state.kycData[index] = updatedRecord;
+  } else {
+    state.kycData.push(updatedRecord);
+  }
+  
+  // Also update user's KYC status in farmers/buyers arrays and currentUser
+  if (kycData.status) {
+    const farmerIndex = state.farmers.findIndex(f => f.id === userId);
+    if (farmerIndex !== -1) {
+      state.farmers[farmerIndex].kycStatus = kycData.status;
+    }
+    
+    const buyerIndex = state.buyers.findIndex(b => b.id === userId);
+    if (buyerIndex !== -1) {
+      state.buyers[buyerIndex].kycStatus = kycData.status;
+    }
+    
+    // Update currentUser if it's the same user
+    if (state.currentUser && state.currentUser.id === userId) {
+      state.currentUser.kycStatus = kycData.status;
+    }
   }
   
   setAppState(state);
@@ -651,4 +728,60 @@ export const formatTimeAgo = (dateString: string): string => {
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
   return formatDate(dateString);
+};
+
+// Helper: Create a dispute
+export const createDispute = (dispute: Omit<Dispute, 'id' | 'createdAt' | 'updatedAt'>): Dispute => {
+  const state = getAppState();
+  const newDispute: Dispute = {
+    ...dispute,
+    id: `dispute_${generateId()}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  
+  state.disputes.unshift(newDispute);
+  setAppState(state);
+  return newDispute;
+};
+
+// Helper: Get disputes by order ID
+export const getDisputesByOrderId = (orderId: string): Dispute[] => {
+  const state = getAppState();
+  return state.disputes.filter(d => d.orderId === orderId);
+};
+
+// Helper: Get all disputes
+export const getAllDisputes = (): Dispute[] => {
+  const state = getAppState();
+  // Ensure disputes array exists
+  if (!state.disputes) {
+    state.disputes = [];
+    setAppState(state);
+  }
+  return state.disputes || [];
+};
+
+// Helper: Update dispute status
+export const updateDisputeStatus = (disputeId: string, status: DisputeStatus, resolution?: {
+  resolvedBy: string;
+  resolution: string;
+  outcome: 'buyer_favor' | 'farmer_favor' | 'partial' | 'dismissed';
+}): void => {
+  const state = getAppState();
+  const index = state.disputes.findIndex(d => d.id === disputeId);
+  
+  if (index !== -1) {
+    state.disputes[index].status = status;
+    state.disputes[index].updatedAt = new Date().toISOString();
+    
+    if (resolution) {
+      state.disputes[index].resolution = {
+        ...resolution,
+        resolvedAt: new Date().toISOString(),
+      };
+    }
+    
+    setAppState(state);
+  }
 };

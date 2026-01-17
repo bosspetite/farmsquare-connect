@@ -4,15 +4,19 @@ export type UserRole = 'farmer' | 'buyer' | 'agent' | 'admin';
 
 export type KYCStatus = 'NOT_STARTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
 
-export type ListingStatus = 'Active' | 'Paused' | 'Sold';
+export type ListingStatus = 'Draft' | 'Active' | 'Paused' | 'SoldOut' | 'Sold' | 'Archived';
 
-export type OrderStatus = 'Pending' | 'Accepted' | 'Rejected' | 'PickupScheduled' | 'InTransit' | 'Delivered';
+export type OrderStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Cancelled';
 
 export type GradeType = 'A' | 'B' | 'C';
 
 export type WithdrawalStatus = 'Submitted' | 'InReview' | 'Paid' | 'Rejected';
 
 export type TransactionType = 'Credit' | 'Debit';
+
+export type DisputeStatus = 'Open' | 'UnderReview' | 'Resolved' | 'Closed';
+
+export type DisputeType = 'quality' | 'quantity' | 'delivery' | 'payment' | 'other';
 
 export interface User {
   id: string;
@@ -58,6 +62,7 @@ export interface Listing {
   grade: GradeType;
   quantityKg: number;
   pricePerKg: number;
+  minOrderKg?: number; // Minimum order quantity in kg
   photos: string[];
   locationLabel: string;
   region: string;
@@ -119,10 +124,47 @@ export interface MarketPriceIntel {
 
 export interface KYCData {
   userId: string;
-  selfiePhoto?: string;
-  idPhoto?: string;
   status: KYCStatus;
   submittedAt?: string;
+  // Personal Information
+  fullName?: string;
+  phoneNumber?: string;
+  dateOfBirth?: string;
+  address?: string;
+  // Identity Verification
+  idType?: 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD';
+  idNumber?: string;
+  idDocumentFile?: string; // File URL or base64
+  selfieFile?: string; // File URL or base64
+  // Business Information (for Buyers - KYB)
+  businessName?: string;
+  businessType?: 'INDIVIDUAL' | 'COMPANY' | 'PARTNERSHIP';
+  businessRegistrationNumber?: string;
+  businessDocumentFile?: string; // File URL or base64
+}
+
+export interface Dispute {
+  id: string;
+  orderId: string;
+  raisedBy: string; // userId
+  raisedByName: string;
+  raisedByRole: 'buyer' | 'farmer';
+  type: DisputeType;
+  status: DisputeStatus;
+  title: string;
+  description: string;
+  evidence?: {
+    photos: string[];
+    notes: string;
+  };
+  resolution?: {
+    resolvedBy: string; // admin userId
+    resolvedAt: string;
+    resolution: string;
+    outcome: 'buyer_favor' | 'farmer_favor' | 'partial' | 'dismissed';
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AppState {
@@ -138,4 +180,5 @@ export interface AppState {
   withdrawals: Withdrawal[];
   marketPrices: MarketPriceIntel[];
   kycData: KYCData[];
+  disputes: Dispute[];
 }

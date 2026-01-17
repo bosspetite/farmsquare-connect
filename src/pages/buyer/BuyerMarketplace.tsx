@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, MapPin, Star, SlidersHorizontal, ArrowUpDown, X } from 'lucide-react';
+import { Search, Filter, MapPin, Star, SlidersHorizontal, ArrowUpDown, X, Shield, AlertCircle } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { getAppState, formatNaira } from '@/lib/store';
+import { getAppState, formatNaira, getKYCByUserId } from '@/lib/store';
 import { GradeType, Listing } from '@/types';
+import { getProduceImage } from '@/utils/produceImages';
+import { useAuth } from '@/contexts/AuthContext';
 
 const commodityFilters = ['All', 'Maize', 'Cassava', 'Rice', 'Yam', 'Sorghum'];
 const gradeFilters: (GradeType | 'All')[] = ['All', 'A', 'B', 'C'];
@@ -20,7 +22,12 @@ type SortOption = 'newest' | 'price-low' | 'price-high' | 'quantity';
 
 const BuyerMarketplace = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const state = getAppState();
+  const kycData = user ? getKYCByUserId(user.id) : null;
+  // Only verified if KYC data exists AND status is APPROVED
+  const isVerified = kycData?.status === 'APPROVED';
+  
   const [search, setSearch] = useState('');
   const [commodityFilter, setCommodityFilter] = useState('All');
   const [gradeFilter, setGradeFilter] = useState<GradeType | 'All'>('All');
@@ -123,6 +130,32 @@ const BuyerMarketplace = () => {
             {hasActiveFilters && <span className="w-2 h-2 bg-primary-foreground rounded-full" />}
           </button>
         </div>
+
+        {/* Verification Warning */}
+        {!isVerified && (
+          <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-farm-warning/20 flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-farm-warning" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Verification Required to Place Orders</p>
+                  <p className="text-sm text-muted-foreground">
+                    Complete your KYC/KYB verification to place orders and access all features
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/buyer/kyc')}
+                className="px-5 py-2.5 bg-farm-warning text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+              >
+                <Shield className="w-4 h-4" />
+                Verify Now
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Enhanced Search Bar */}
         <div className="relative">
@@ -283,55 +316,36 @@ const BuyerMarketplace = () => {
               <div className="relative group">
                 {/* Image with overlay on hover */}
                 <div className="w-full h-48 rounded-xl bg-muted mb-4 flex items-center justify-center overflow-hidden relative">
-                  {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
-                    <>
-                      <img 
-                        src={listing.photos[0]} 
-                        alt={listing.commodity} 
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          const parent = e.currentTarget.parentElement;
-                          if (parent && !parent.querySelector('.fallback-emoji')) {
-                            const fallback = document.createElement('div');
-                            fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center bg-muted';
-                            const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : listing.commodity === 'Sorghum' ? '🌾' : '🌾';
-                            fallback.innerHTML = `<span class="text-5xl">${emoji}</span>`;
-                            parent.appendChild(fallback);
-                          }
-                        }}
-                      />
-                      {/* Image count badge */}
-                      {listing.photos.length > 1 && (
-                        <div className="absolute top-2 right-2 px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg text-xs font-medium text-foreground">
-                          +{listing.photos.length - 1}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-                      <span className="text-5xl">
-                        {listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : listing.commodity === 'Sorghum' ? '🌾' : '🌾'}
-                      </span>
+                  <img 
+                    src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)} 
+                    alt={listing.commodity} 
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                    onError={(e) => {
+                      e.currentTarget.src = getProduceImage(listing.commodity);
+                    }}
+                  />
+                  {/* Image count badge */}
+                  {listing.photos && listing.photos.length > 1 && (
+                    <div className="absolute top-2 right-2 px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg text-xs font-medium text-foreground">
+                      +{listing.photos.length - 1}
                     </div>
                   )}
+                  {/* Grade Badge */}
+                  <div className="absolute top-2 left-2">
+                    <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                      listing.grade === 'A' ? 'bg-farm-success/90 text-white' :
+                      listing.grade === 'B' ? 'bg-farm-warning/90 text-white' :
+                      'bg-farm-brown/90 text-white'
+                    }`}>
+                      Grade {listing.grade}
+                    </span>
+                  </div>
                   {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <div className="absolute inset-0 bg-black/5 group-hover:bg-black/10 transition-colors duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <span className="text-sm font-medium text-primary-foreground bg-primary px-4 py-2 rounded-xl">
                       View Details
                     </span>
                   </div>
-                </div>
-                
-                {/* Grade Badge */}
-                <div className="absolute top-4 left-4">
-                  <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                    listing.grade === 'A' ? 'bg-farm-success/90 text-white' :
-                    listing.grade === 'B' ? 'bg-farm-warning/90 text-white' :
-                    'bg-farm-brown/90 text-white'
-                  }`}>
-                    Grade {listing.grade}
-                  </span>
                 </div>
               </div>
               

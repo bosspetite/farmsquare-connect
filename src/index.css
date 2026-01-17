@@ -18,48 +18,47 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary - Muted green accent */
-    --primary: 142 71% 45%;
+    /* Primary - Muted green accent (Paystack/Stripe style) */
+    --primary: 142 76% 36%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Light gray */
-    --secondary: 210 40% 96%;
+    --secondary: 0 0% 96%;
     --secondary-foreground: 222 47% 11%;
 
     /* Muted - Soft gray */
-    --muted: 210 40% 96%;
+    --muted: 0 0% 96%;
     --muted-foreground: 215 16% 47%;
 
     /* Accent - Subtle gray */
-    --accent: 210 40% 96%;
+    --accent: 0 0% 96%;
     --accent-foreground: 222 47% 11%;
 
     /* Destructive */
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Borders and inputs */
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 142 71% 45%;
+    /* Borders and inputs - Professional gray */
+    --border: 220 13% 91%;
+    --input: 220 13% 96%;
+    --ring: 142 76% 36%;
 
     --radius: 1rem;
 
-    /* Custom FarmSquare tokens */
+    /* Custom FarmSquare tokens - Enterprise colors */
     --farm-dark: 222 47% 11%;
     --farm-surface: 0 0% 100%;
-    --farm-accent: 142 71% 45%;
-    --farm-accent-glow: 142 71% 50%;
-    --farm-brown: 30 40% 30%;
-    --farm-brown-light: 30 30% 50%;
-    --farm-success: 142 71% 45%;
+    --farm-accent: 142 76% 36%;
+    --farm-brown: 30 25% 25%;
+    --farm-brown-light: 30 15% 40%;
+    --farm-success: 142 76% 36%;
     --farm-warning: 38 92% 50%;
-    --farm-info: 199 89% 48%;
+    --farm-info: 217 91% 60%;
 
-    /* Gradients - Removed green gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 100%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(142 71% 45%) 0%, hsl(142 71% 50%) 100%);
+    /* No gradients - solid colors only */
+    --gradient-hero: none;
+    --gradient-card: none;
+    --gradient-accent: none;
 
     /* Shadows - Subtle, no green glow */
     --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
@@ -90,18 +89,38 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+  
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
   }
 }
 
 @layer components {
-  /* Card styles */
+  /* Card styles - Professional, minimal */
   .farm-card {
-    @apply bg-card rounded-2xl border border-border p-5;
-    box-shadow: var(--shadow-card);
+    @apply bg-card rounded-lg border border-border p-5;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   }
 
   .farm-card-interactive {
@@ -109,26 +128,26 @@
   }
 
   .farm-card-interactive:hover {
-    @apply border-border;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    @apply border-border bg-muted/30;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
   }
 
-  /* Button - No glow effect */
+  /* Button - Minimal, professional */
   .btn-glow {
-    box-shadow: var(--shadow-button);
+    box-shadow: none;
   }
 
   .btn-glow:hover {
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    box-shadow: none;
   }
 
-  /* Status badges */
+  /* Status badges - Subtle, professional */
   .status-active {
-    @apply bg-primary/20 text-primary border border-primary/30;
+    @apply bg-primary/10 text-primary border border-primary/20;
   }
 
   .status-pending {
-    @apply bg-farm-warning/20 text-farm-warning border border-farm-warning/30;
+    @apply bg-farm-warning/10 text-farm-warning border border-farm-warning/20;
   }
 
   .status-paused {
@@ -136,11 +155,11 @@
   }
 
   .status-delivered {
-    @apply bg-farm-success/20 text-farm-success border border-farm-success/30;
+    @apply bg-farm-success/10 text-farm-success border border-farm-success/20;
   }
 
   .status-rejected {
-    @apply bg-destructive/20 text-destructive border border-destructive/30;
+    @apply bg-destructive/10 text-destructive border border-destructive/20;
   }
 
   /* Mobile bottom nav */
@@ -154,9 +173,9 @@
     @apply animate-in fade-in-0 slide-in-from-bottom-2 duration-300;
   }
 
-  /* Wallet card gradient */
+  /* Wallet card - Solid white, no gradient */
   .wallet-gradient {
-    background: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
+    background: hsl(0 0% 100%);
   }
 }
 
@@ -184,9 +203,8 @@
     @apply backdrop-blur-xl bg-card/80;
   }
 
-  /* Text gradients */
+  /* No text gradients - solid colors only for enterprise look */
   .text-gradient {
-    @apply bg-clip-text text-transparent;
-    background-image: var(--gradient-accent);
+    @apply text-primary;
   }
 }

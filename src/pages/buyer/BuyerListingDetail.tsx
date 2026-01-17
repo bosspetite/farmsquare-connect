@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, User, Package, ShoppingCart, ZoomIn, X } from 'lucide-react';
+import { ArrowLeft, MapPin, User, Package, ShoppingCart, ZoomIn, X, Shield, AlertCircle } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { Modal } from '@/components/ui/Modal';
-import { getAppState, formatNaira, addOrder, setAppState, getWalletByUserId } from '@/lib/store';
+import { getAppState, formatNaira, addOrder, setAppState, getWalletByUserId, getKYCByUserId } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { getProduceImage } from '@/utils/produceImages';
+import PaymentGateway from './PaymentGateway';
 
 const BuyerListingDetail = () => {
   const { listingId } = useParams();
@@ -14,10 +16,16 @@ const BuyerListingDetail = () => {
   const state = getAppState();
   const listing = state.listings.find(l => l.id === listingId);
   
+  const kycData = user ? getKYCByUserId(user.id) : null;
+  // Only verified if KYC data exists AND status is APPROVED
+  const isVerified = kycData?.status === 'APPROVED';
+  
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showPaymentGateway, setShowPaymentGateway] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   if (!listing) {
     return (
@@ -29,8 +37,20 @@ const BuyerListingDetail = () => {
     );
   }
 
-  const handleOrder = () => {
+  const handleCheckout = () => {
     if (!user || !quantity) return;
+    
+    // Check verification status
+    if (!isVerified) {
+      toast({ 
+        title: 'Verification Required', 
+        description: 'Please complete your KYC/KYB verification to place orders',
+        variant: 'destructive'
+      });
+      navigate('/buyer/kyc');
+      return;
+    }
+    
     const qty = parseInt(quantity);
     
     // Validate quantity
@@ -43,18 +63,30 @@ const BuyerListingDetail = () => {
       return;
     }
     
-    // Check buyer wallet balance
-    const buyerWallet = state.wallets.find(w => w.userId === user.id);
-    const amount = qty * listing.pricePerKg;
-    
-    if (!buyerWallet || buyerWallet.available < amount) {
+    // Check minimum order quantity
+    if (listing.minOrderKg && qty < listing.minOrderKg) {
       toast({ 
-        title: 'Insufficient balance', 
-        description: 'Please add funds to your wallet',
+        title: 'Minimum order not met', 
+        description: `Minimum order quantity is ${listing.minOrderKg}kg`,
         variant: 'destructive'
       });
       return;
     }
+    
+    // Close checkout modal and open payment gateway
+    // Payment gateway will process payment, fund wallet, then order will be created
+    setShowCheckout(false);
+    // Small delay to make flow less predictable and more realistic
+    setTimeout(() => {
+      setShowPaymentGateway(true);
+    }, 300);
+  };
+
+  const handlePaymentSuccess = () => {
+    if (!user || !quantity) return;
+    
+    const qty = parseInt(quantity);
+    const amount = qty * listing.pricePerKg;
     
     // Use shared store helper to add order (handles wallet updates)
     addOrder({
@@ -81,9 +113,14 @@ const BuyerListingDetail = () => {
       setAppState(state);
     }
     
-    setShowCheckout(false);
+    setShowPaymentGateway(false);
+    setQuantity('');
     toast({ title: 'Order placed successfully!' });
-    navigate('/buyer/orders');
+    setTimeout(() => navigate('/buyer/orders'), 500);
+  };
+
+  const handlePaymentCancel = () => {
+    setShowPaymentGateway(false);
   };
 
   const totalAmount = quantity ? parseInt(quantity) * listing.pricePerKg : 0;
@@ -91,6 +128,9 @@ const BuyerListingDetail = () => {
   return (
     <BuyerLayout>
       <div className="space-y-6 animate-fade-up max-w-2xl mx-auto">
+        <button onClick={() => navigate('/buyer/marketplace')} className="flex items-center gap-2 text-muted-foreground">
+          <ArrowLeft className="w-5 h-5" /> Back to Marketplace
+        </button>
         <button onClick={() => navigate('/buyer/marketplace')} className="flex items-center gap-2 text-muted-foreground">
           <ArrowLeft className="w-5 h-5" /> Back to Marketplace
         </button>
@@ -102,46 +142,28 @@ const BuyerListingDetail = () => {
             className="w-full h-80 rounded-2xl bg-muted flex items-center justify-center overflow-hidden relative group cursor-pointer"
             onClick={() => listing.photos && listing.photos.length > 0 && setShowImageModal(true)}
           >
-            {listing.photos && listing.photos.length > 0 && listing.photos[selectedImageIndex] ? (
-              <>
-                <img 
-                  src={listing.photos[selectedImageIndex]} 
-                  alt={listing.commodity} 
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  loading="lazy"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    const parent = e.currentTarget.parentElement;
-                    if (parent && !parent.querySelector('.fallback-emoji')) {
-                      const fallback = document.createElement('div');
-                      fallback.className = 'fallback-emoji w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5';
-                      const emoji = listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : listing.commodity === 'Sorghum' ? '🌾' : '🌾';
-                      fallback.innerHTML = `<span class="text-7xl">${emoji}</span>`;
-                      parent.appendChild(fallback);
-                    }
-                  }}
-                />
-                {/* Image count badge */}
-                {listing.photos.length > 1 && (
-                  <div className="absolute top-4 right-4 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-lg text-sm font-medium text-foreground shadow-lg">
-                    {selectedImageIndex + 1} / {listing.photos.length}
-                  </div>
-                )}
-                {/* Zoom icon on hover */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <div className="px-4 py-2 bg-background/90 backdrop-blur-sm rounded-xl flex items-center gap-2">
-                    <ZoomIn className="w-5 h-5 text-foreground" />
-                    <span className="text-sm font-medium text-foreground">Click to view full size</span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-                <span className="text-7xl">
-                  {listing.commodity === 'Maize' ? '🌽' : listing.commodity === 'Rice' ? '🌾' : listing.commodity === 'Cassava' ? '🥔' : listing.commodity === 'Yam' ? '🍠' : listing.commodity === 'Sorghum' ? '🌾' : '🌾'}
-                </span>
+            <img 
+              src={(listing.photos && listing.photos.length > 0 && listing.photos[selectedImageIndex]) ? listing.photos[selectedImageIndex] : getProduceImage(listing.commodity)} 
+              alt={listing.commodity} 
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.src = getProduceImage(listing.commodity);
+              }}
+            />
+            {/* Image count badge */}
+            {listing.photos && listing.photos.length > 1 && (
+              <div className="absolute top-4 right-4 px-3 py-1.5 bg-background/90 backdrop-blur-sm rounded-lg text-sm font-medium text-foreground shadow-lg">
+                {selectedImageIndex + 1} / {listing.photos.length}
               </div>
             )}
+            {/* Zoom icon on hover */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <div className="px-4 py-2 bg-background/90 backdrop-blur-sm rounded-xl flex items-center gap-2">
+                <ZoomIn className="w-5 h-5 text-foreground" />
+                <span className="text-sm font-medium text-foreground">Click to view full size</span>
+              </div>
+            </div>
           </div>
           
           {/* Thumbnail Gallery */}
@@ -158,12 +180,12 @@ const BuyerListingDetail = () => {
                   onClick={() => setSelectedImageIndex(index)}
                 >
                   <img 
-                    src={photo} 
+                    src={photo || getProduceImage(listing.commodity)} 
                     alt={`${listing.commodity} ${index + 1}`}
                     className="w-full h-full object-cover"
                     loading="lazy"
                     onError={(e) => {
-                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.src = getProduceImage(listing.commodity);
                     }}
                   />
                 </div>
@@ -173,7 +195,7 @@ const BuyerListingDetail = () => {
         </div>
 
         {/* Image Lightbox Modal */}
-        {showImageModal && listing.photos && listing.photos.length > 0 && (
+        {showImageModal && (
           <div 
             className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
             onClick={() => setShowImageModal(false)}
@@ -187,13 +209,16 @@ const BuyerListingDetail = () => {
             
             <div className="relative max-w-4xl w-full max-h-[90vh] flex items-center justify-center">
               <img 
-                src={listing.photos[selectedImageIndex]} 
+                src={(listing.photos && listing.photos.length > 0 && listing.photos[selectedImageIndex]) ? listing.photos[selectedImageIndex] : getProduceImage(listing.commodity)} 
                 alt={listing.commodity}
                 className="max-w-full max-h-[90vh] object-contain rounded-xl"
                 onClick={(e) => e.stopPropagation()}
+                onError={(e) => {
+                  e.currentTarget.src = getProduceImage(listing.commodity);
+                }}
               />
               
-              {listing.photos.length > 1 && (
+              {listing.photos && listing.photos.length > 1 && (
                 <>
                   <button
                     onClick={(e) => {
@@ -246,13 +271,46 @@ const BuyerListingDetail = () => {
           </div>
         </div>
 
+        {/* Verification Warning */}
+        {!isVerified && (
+          <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
+            <div className="flex items-center gap-3">
+              <Shield className="w-6 h-6 text-farm-warning" />
+              <div className="flex-1">
+                <p className="font-semibold text-foreground">Verification Required</p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Complete your KYC/KYB verification to place orders
+                </p>
+                <button
+                  onClick={() => navigate('/buyer/kyc')}
+                  className="px-4 py-2 bg-farm-warning text-white rounded-lg text-sm font-medium"
+                >
+                  Verify Now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Order Button */}
         <button
-          onClick={() => setShowCheckout(true)}
-          className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow flex items-center justify-center gap-2"
+          onClick={() => {
+            if (!isVerified) {
+              toast({ 
+                title: 'Verification Required', 
+                description: 'Please complete your KYC/KYB verification to place orders',
+                variant: 'destructive'
+              });
+              navigate('/buyer/kyc');
+              return;
+            }
+            setShowCheckout(true);
+          }}
+          disabled={!isVerified}
+          className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ShoppingCart className="w-5 h-5" />
-          Place Order
+          {isVerified ? 'Place Order' : 'Verification Required'}
         </button>
 
         {/* Checkout Modal */}
@@ -270,10 +328,13 @@ const BuyerListingDetail = () => {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="Enter quantity"
+                min={listing.minOrderKg || 1}
                 max={listing.quantityKg}
                 className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
               />
-              <p className="text-xs text-muted-foreground mt-1">Max: {listing.quantityKg}kg</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {listing.minOrderKg ? `Min: ${listing.minOrderKg}kg • ` : ''}Max: {listing.quantityKg}kg
+              </p>
             </div>
 
             {quantity && (
@@ -290,14 +351,28 @@ const BuyerListingDetail = () => {
             )}
 
             <button
-              onClick={handleOrder}
+              onClick={handleCheckout}
               disabled={!quantity || parseInt(quantity) <= 0}
               className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
             >
-              Confirm Order
+              Proceed to Payment
             </button>
           </div>
         </Modal>
+
+        {/* Payment Gateway */}
+        {showPaymentGateway && quantity && (
+          <PaymentGateway
+            amount={parseInt(quantity) * listing.pricePerKg}
+            orderDetails={{
+              commodity: listing.commodity,
+              quantity: parseInt(quantity),
+              farmerName: listing.farmerName,
+            }}
+            onSuccess={handlePaymentSuccess}
+            onCancel={handlePaymentCancel}
+          />
+        )}
       </div>
     </BuyerLayout>
   );

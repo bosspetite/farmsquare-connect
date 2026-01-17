@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle } from 'lucide-react';
+import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle, Clock, CheckCircle, DollarSign } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, getKYCByUserId, formatNaira, formatDate } from '@/lib/store';
+import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, getKYCByUserId, getOrdersByFarmerId, formatNaira, formatDate } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 
 const banks = ['GTBank', 'Access Bank', 'Zenith Bank', 'First Bank', 'UBA'];
@@ -19,8 +19,18 @@ const FarmerWallet = () => {
   const wallet = user ? getWalletByUserId(user.id) : null;
   const transactions = user ? getTransactionsByUserId(user.id) : [];
   const withdrawals = user ? getWithdrawalsByUserId(user.id) : [];
+  const orders = user ? getOrdersByFarmerId(user.id) : [];
   const [kycData, setKycData] = useState(user ? getKYCByUserId(user.id) : null);
   const isKYCApproved = kycData?.status === 'APPROVED';
+  
+  // Calculate pending earnings from orders
+  const pendingEarnings = orders
+    .filter(o => ['Accepted', 'Processing', 'PickupScheduled', 'InTransit'].includes(o.status))
+    .reduce((sum, o) => sum + o.amount, 0);
+  
+  // Completed payouts (withdrawals that are paid)
+  const completedPayouts = withdrawals.filter(w => w.status === 'Paid');
+  const totalPayouts = completedPayouts.reduce((sum, w) => sum + w.amount, 0);
 
   // Refresh KYC data
   useEffect(() => {
@@ -85,6 +95,34 @@ const FarmerWallet = () => {
           }}
         />
         
+        {/* Pending Earnings & Completed Payouts Summary */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="farm-card bg-farm-info/5 border-farm-info/20">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-farm-info/10 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-farm-info" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Pending Earnings</p>
+                <p className="text-lg font-bold text-foreground">{formatNaira(pendingEarnings)}</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">From active orders</p>
+          </div>
+          <div className="farm-card bg-farm-success/5 border-farm-success/20">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-farm-success/10 flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-farm-success" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Completed Payouts</p>
+                <p className="text-lg font-bold text-foreground">{formatNaira(totalPayouts)}</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{completedPayouts.length} withdrawal{completedPayouts.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+
         {/* KYC Warning */}
         {!isKYCApproved && (
           <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
@@ -110,19 +148,19 @@ const FarmerWallet = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setTab('transactions')}
-            className={`flex-1 py-3 rounded-xl font-medium text-sm ${
-              tab === 'transactions' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'
+            className={`flex-1 py-3 rounded-xl font-medium text-sm transition-all ${
+              tab === 'transactions' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground hover:bg-muted'
             }`}
           >
-            Transactions
+            Transaction History
           </button>
           <button
             onClick={() => setTab('withdrawals')}
-            className={`flex-1 py-3 rounded-xl font-medium text-sm ${
-              tab === 'withdrawals' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'
+            className={`flex-1 py-3 rounded-xl font-medium text-sm transition-all ${
+              tab === 'withdrawals' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground hover:bg-muted'
             }`}
           >
-            Withdrawals
+            Withdrawal History
           </button>
         </div>
 
@@ -130,28 +168,40 @@ const FarmerWallet = () => {
         {tab === 'transactions' && (
           <div className="space-y-2">
             {transactions.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No transactions yet</p>
+              <div className="farm-card text-center py-12">
+                <DollarSign className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                <p className="text-muted-foreground">No transactions yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Transaction history will appear here</p>
+              </div>
             ) : (
-              transactions.map((txn) => (
-                <div key={txn.id} className="farm-card flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    txn.type === 'Credit' ? 'bg-farm-success/10' : 'bg-destructive/10'
-                  }`}>
-                    {txn.type === 'Credit' ? (
-                      <ArrowDownLeft className="w-5 h-5 text-farm-success" />
-                    ) : (
-                      <ArrowUpRight className="w-5 h-5 text-destructive" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground text-sm">{txn.title}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(txn.createdAt)}</p>
-                  </div>
-                  <p className={`font-semibold ${txn.type === 'Credit' ? 'text-farm-success' : 'text-destructive'}`}>
-                    {txn.type === 'Credit' ? '+' : '-'}{formatNaira(txn.amount)}
-                  </p>
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-foreground">All Transactions</p>
+                  <p className="text-xs text-muted-foreground">{transactions.length} total</p>
                 </div>
-              ))
+                {transactions.map((txn) => (
+                  <div key={txn.id} className="farm-card flex items-center gap-4 hover:bg-muted/50 transition-colors">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      txn.type === 'Credit' ? 'bg-farm-success/10' : 'bg-destructive/10'
+                    }`}>
+                      {txn.type === 'Credit' ? (
+                        <ArrowDownLeft className="w-6 h-6 text-farm-success" />
+                      ) : (
+                        <ArrowUpRight className="w-6 h-6 text-destructive" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">{txn.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatDate(txn.createdAt)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-bold text-lg ${txn.type === 'Credit' ? 'text-farm-success' : 'text-destructive'}`}>
+                        {txn.type === 'Credit' ? '+' : '-'}{formatNaira(txn.amount)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         )}
@@ -160,24 +210,50 @@ const FarmerWallet = () => {
         {tab === 'withdrawals' && (
           <div className="space-y-2">
             {withdrawals.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No withdrawals yet</p>
+              <div className="farm-card text-center py-12">
+                <Wallet className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                <p className="text-muted-foreground">No withdrawals yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Withdrawal history will appear here</p>
+              </div>
             ) : (
-              withdrawals.map((wd) => (
-                <div key={wd.id} className="farm-card flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">{formatNaira(wd.amount)}</p>
-                    <p className="text-sm text-muted-foreground">{wd.bankName} · {wd.accountMasked}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(wd.createdAt)}</p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    wd.status === 'Paid' ? 'bg-farm-success/10 text-farm-success' :
-                    wd.status === 'Rejected' ? 'bg-destructive/10 text-destructive' :
-                    'bg-farm-warning/10 text-farm-warning'
-                  }`}>
-                    {wd.status}
-                  </span>
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-foreground">Withdrawal Requests</p>
+                  <p className="text-xs text-muted-foreground">{withdrawals.length} total</p>
                 </div>
-              ))
+                {withdrawals.map((wd) => (
+                  <div key={wd.id} className="farm-card flex items-center justify-between hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        wd.status === 'Paid' ? 'bg-farm-success/10' :
+                        wd.status === 'Rejected' ? 'bg-destructive/10' :
+                        'bg-farm-warning/10'
+                      }`}>
+                        {wd.status === 'Paid' ? (
+                          <CheckCircle className="w-6 h-6 text-farm-success" />
+                        ) : wd.status === 'Rejected' ? (
+                          <AlertCircle className="w-6 h-6 text-destructive" />
+                        ) : (
+                          <Clock className="w-6 h-6 text-farm-warning" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-bold text-foreground text-lg">{formatNaira(wd.amount)}</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">{wd.bankName} · {wd.accountMasked}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatDate(wd.createdAt)}</p>
+                      </div>
+                    </div>
+                    <span className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                      wd.status === 'Paid' ? 'bg-farm-success/10 text-farm-success' :
+                      wd.status === 'Rejected' ? 'bg-destructive/10 text-destructive' :
+                      wd.status === 'InReview' ? 'bg-farm-info/10 text-farm-info' :
+                      'bg-farm-warning/10 text-farm-warning'
+                    }`}>
+                      {wd.status === 'InReview' ? 'In Review' : wd.status}
+                    </span>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         )}

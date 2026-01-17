@@ -10,8 +10,9 @@ import { getListingsByFarmerId, updateListing, deleteListing, formatNaira, getAp
 import { Listing, ListingStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { Package } from 'lucide-react';
+import { getProduceImage } from '@/utils/produceImages';
 
-const filters: ListingStatus[] = ['Active', 'Paused', 'Sold'];
+const filters: ListingStatus[] = ['Draft', 'Active', 'Paused', 'SoldOut', 'Sold', 'Archived'];
 
 const FarmerListings = () => {
   const navigate = useNavigate();
@@ -28,9 +29,28 @@ const FarmerListings = () => {
     : allListings.filter(l => l.status === activeFilter);
 
   const handlePauseResume = (listing: Listing) => {
-    const newStatus = listing.status === 'Active' ? 'Paused' : 'Active';
-    updateListing(listing.id, { status: newStatus });
-    toast({ title: `Listing ${newStatus === 'Active' ? 'resumed' : 'paused'}` });
+    if (listing.status === 'Active') {
+      updateListing(listing.id, { status: 'Paused' });
+      toast({ title: 'Listing paused' });
+    } else if (listing.status === 'Paused') {
+      updateListing(listing.id, { status: 'Active' });
+      toast({ title: 'Listing resumed' });
+    } else if (listing.status === 'Draft') {
+      updateListing(listing.id, { status: 'Active' });
+      toast({ title: 'Listing published' });
+    }
+    window.location.reload();
+  };
+
+  const handleArchive = (listing: Listing) => {
+    updateListing(listing.id, { status: 'Archived' });
+    toast({ title: 'Listing archived' });
+    window.location.reload();
+  };
+
+  const handleMarkSoldOut = (listing: Listing) => {
+    updateListing(listing.id, { status: 'SoldOut' });
+    toast({ title: 'Listing marked as sold out' });
     window.location.reload();
   };
 
@@ -142,26 +162,14 @@ const FarmerListings = () => {
               <div key={listing.id} className="farm-card">
                 <div className="flex gap-4">
                   <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden relative">
-                    {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
-                      <img 
-                        src={listing.photos[0]} 
-                        alt={listing.commodity} 
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback if image fails to load
-                          e.currentTarget.style.display = 'none';
-                          const parent = e.currentTarget.parentElement;
-                          if (parent && !parent.querySelector('.fallback-icon')) {
-                            const fallback = document.createElement('div');
-                            fallback.className = 'fallback-icon w-full h-full flex items-center justify-center';
-                            fallback.innerHTML = '<svg class="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>';
-                            parent.appendChild(fallback);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <Package className="w-8 h-8 text-muted-foreground" />
-                    )}
+                    <img 
+                      src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)} 
+                      alt={listing.commodity} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = getProduceImage(listing.commodity);
+                      }}
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-start justify-between mb-2">
@@ -174,26 +182,58 @@ const FarmerListings = () => {
                     <p className="text-lg font-bold text-primary">{formatNaira(listing.pricePerKg)}/kg</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-border">
-                  <button
-                    onClick={() => handleEdit(listing)}
-                    className="py-2 bg-muted text-foreground rounded-xl text-sm font-medium"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handlePauseResume(listing)}
-                    className={`py-2 rounded-xl text-sm font-medium ${
-                      listing.status === 'Active' 
-                        ? 'bg-farm-warning/10 text-farm-warning' 
-                        : 'bg-primary/10 text-primary'
-                    }`}
-                  >
-                    {listing.status === 'Active' ? 'Pause' : 'Resume'}
-                  </button>
+                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
+                  {listing.status !== 'Archived' && (
+                    <button
+                      onClick={() => handleEdit(listing)}
+                      className="px-4 py-2 bg-muted text-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {listing.status === 'Active' && (
+                    <>
+                      <button
+                        onClick={() => handlePauseResume(listing)}
+                        className="px-4 py-2 bg-farm-warning/10 text-farm-warning rounded-xl text-sm font-medium hover:bg-farm-warning/20 transition-colors"
+                      >
+                        Pause
+                      </button>
+                      <button
+                        onClick={() => handleMarkSoldOut(listing)}
+                        className="px-4 py-2 bg-farm-info/10 text-farm-info rounded-xl text-sm font-medium hover:bg-farm-info/20 transition-colors"
+                      >
+                        Mark Sold Out
+                      </button>
+                    </>
+                  )}
+                  {(listing.status === 'Paused' || listing.status === 'Draft') && (
+                    <button
+                      onClick={() => handlePauseResume(listing)}
+                      className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-sm font-medium hover:bg-primary/20 transition-colors"
+                    >
+                      {listing.status === 'Draft' ? 'Publish' : 'Resume'}
+                    </button>
+                  )}
+                  {listing.status !== 'Archived' && listing.status !== 'SoldOut' && (
+                    <button
+                      onClick={() => handleArchive(listing)}
+                      className="px-4 py-2 bg-muted text-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-colors"
+                    >
+                      Archive
+                    </button>
+                  )}
+                  {listing.status === 'Archived' && (
+                    <button
+                      onClick={() => handlePauseResume(listing)}
+                      className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-sm font-medium hover:bg-primary/20 transition-colors"
+                    >
+                      Restore
+                    </button>
+                  )}
                   <button
                     onClick={() => setDeleteConfirm(listing)}
-                    className="py-2 bg-destructive/10 text-destructive rounded-xl text-sm font-medium"
+                    className="px-4 py-2 bg-destructive/10 text-destructive rounded-xl text-sm font-medium hover:bg-destructive/20 transition-colors"
                   >
                     Delete
                   </button>

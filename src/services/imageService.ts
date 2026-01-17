@@ -110,3 +110,5 @@ export const validateImageFile = (file: File): { valid: boolean; error?: string 
 
 
 
+
+

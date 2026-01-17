@@ -38,14 +38,21 @@ const FarmerOrderDetail = () => {
         timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined, 
         completed: !!order.acceptedAt, 
         current: order.status === 'Pending',
-        description: order.acceptedAt ? 'Order accepted, preparing for pickup' : 'Waiting for acceptance'
+        description: order.acceptedAt ? 'Order accepted' : 'Waiting for acceptance'
       },
       { 
-        label: 'Pickup Scheduled', 
+        label: 'Processing', 
+        timestamp: order.status === 'Processing' ? new Date().toISOString() : undefined, 
+        completed: ['Processing', 'PickupScheduled', 'InTransit', 'Delivered'].includes(order.status), 
+        current: order.status === 'Accepted',
+        description: 'Preparing produce for pickup'
+      },
+      { 
+        label: 'Ready for Pickup', 
         timestamp: order.pickupScheduledAt ? formatDate(order.pickupScheduledAt) : undefined, 
         completed: !!order.pickupScheduledAt, 
-        current: order.status === 'Accepted',
-        description: order.pickupScheduledAt ? 'Pickup date confirmed' : 'Schedule pickup date'
+        current: order.status === 'Processing',
+        description: order.pickupScheduledAt ? 'Ready for buyer pickup' : 'Mark as ready when produce is prepared'
       },
       { 
         label: 'In Transit', 
@@ -74,7 +81,8 @@ const FarmerOrderDetail = () => {
 
   const getNextStatus = (): OrderStatus | null => {
     switch (order.status) {
-      case 'Accepted': return 'PickupScheduled';
+      case 'Accepted': return 'Processing';
+      case 'Processing': return 'PickupScheduled';
       case 'PickupScheduled': return 'InTransit';
       case 'InTransit': return 'Delivered';
       default: return null;
@@ -238,7 +246,10 @@ const FarmerOrderDetail = () => {
             onClick={handleProgress}
             className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
           >
-            Mark as {nextStatus === 'PickupScheduled' ? 'Pickup Scheduled' : nextStatus === 'InTransit' ? 'In Transit' : 'Delivered'}
+            Mark as {nextStatus === 'Processing' ? 'Processing' : 
+                     nextStatus === 'PickupScheduled' ? 'Ready for Pickup' : 
+                     nextStatus === 'InTransit' ? 'In Transit' : 
+                     'Delivered'}
           </button>
         )}
       </div>

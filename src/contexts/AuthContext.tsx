@@ -49,6 +49,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       state.currentUser = existingUser;
       setAppState(state);
       setUser(existingUser);
+    } else {
+      // If user doesn't exist, create a new one (for admin especially)
+      console.warn(`No ${role} user found in seed data. Creating new user.`);
+      const newUser: User = {
+        id: `${role}_${Date.now()}`,
+        name: name || `${role} User`,
+        phone: '+2348000000000',
+        role: role,
+        region: region || 'Lagos',
+        kycStatus: role === 'admin' ? 'APPROVED' : 'NOT_STARTED',
+        createdAt: new Date().toISOString(),
+      };
+      
+      // Add to appropriate array
+      switch (role) {
+        case 'farmer':
+          state.farmers.push(newUser as any);
+          break;
+        case 'buyer':
+          state.buyers.push(newUser as any);
+          break;
+        case 'agent':
+          state.agents.push({ ...newUser, farmersOnboarded: 0, inspectionsCompleted: 0 } as any);
+          break;
+        case 'admin':
+          state.admins.push(newUser as any);
+          break;
+      }
+      
+      state.currentUser = newUser;
+      setAppState(state);
+      setUser(newUser);
     }
   };
 

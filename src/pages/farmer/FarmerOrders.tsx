@@ -10,7 +10,7 @@ import { getOrdersByFarmerId, updateOrderStatus, formatNaira, formatTimeAgo } fr
 import { Order, OrderStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
 
-const statusFilters: (OrderStatus | 'All')[] = ['All', 'Pending', 'Accepted', 'InTransit', 'Delivered'];
+const statusFilters: (OrderStatus | 'All')[] = ['All', 'Pending', 'Accepted', 'Processing', 'PickupScheduled', 'InTransit', 'Delivered'];
 
 const FarmerOrders = () => {
   const navigate = useNavigate();
@@ -45,7 +45,10 @@ const FarmerOrders = () => {
                 activeFilter === filter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'
               }`}
             >
-              {filter === 'All' ? 'All' : filter === 'InTransit' ? 'In Transit' : filter}
+              {filter === 'All' ? 'All' : 
+               filter === 'InTransit' ? 'In Transit' : 
+               filter === 'PickupScheduled' ? 'Ready for Pickup' :
+               filter}
             </button>
           ))}
         </div>

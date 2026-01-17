@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight, Eye, DollarSign, CheckCircle } from 'lucide-react';
+import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight, Eye, DollarSign, CheckCircle, AlertCircle, Shield, Camera, Info } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { StatCard } from '@/components/ui/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getOrdersByFarmerId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState } from '@/lib/store';
+import { getWalletByUserId, getOrdersByFarmerId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState, getKYCByUserId } from '@/lib/store';
+import { getProduceImage } from '@/utils/produceImages';
 
 const FarmerDashboard = () => {
   const navigate = useNavigate();
@@ -16,6 +17,10 @@ const FarmerDashboard = () => {
   const orders = allOrders.slice(0, 3);
   const state = getAppState();
   const listings = user ? getListingsByFarmerId(user.id) : [];
+  const kycData = user ? getKYCByUserId(user.id) : null;
+  
+  const kycStatus = kycData?.status || 'NOT_STARTED';
+  const isKYCApproved = kycStatus === 'APPROVED';
   
   // Calculate stats
   const activeListings = listings.filter(l => l.status === 'Active').length;
@@ -39,9 +44,62 @@ const FarmerDashboard = () => {
         {/* Mobile Welcome */}
         <div className="lg:hidden">
           <h1 className="text-xl font-display font-bold text-foreground">
-            Welcome back, {user?.name?.split(' ')[0] || 'Farmer'} 🚜
+            Welcome back, {user?.name?.split(' ')[0] || 'Farmer'}
           </h1>
         </div>
+
+        {/* KYC Status Banner */}
+        {!isKYCApproved && (
+          <div className={`farm-card ${
+            kycStatus === 'REJECTED' 
+              ? 'bg-destructive/10 border-destructive/20' 
+              : kycStatus === 'IN_REVIEW'
+              ? 'bg-farm-info/10 border-farm-info/20'
+              : 'bg-farm-warning/10 border-farm-warning/20'
+          }`}>
+            <div className="flex items-start gap-3">
+              {kycStatus === 'REJECTED' ? (
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              ) : kycStatus === 'IN_REVIEW' ? (
+                <Shield className="w-5 h-5 text-farm-info flex-shrink-0 mt-0.5" />
+              ) : (
+                <Shield className="w-5 h-5 text-farm-warning flex-shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1">
+                <p className="font-semibold text-foreground mb-1">
+                  {kycStatus === 'REJECTED' 
+                    ? 'Verification Failed' 
+                    : kycStatus === 'IN_REVIEW'
+                    ? 'Verification Under Review'
+                    : 'Verification Required'}
+                </p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  {kycStatus === 'REJECTED'
+                    ? 'Your documents were not approved. Please resubmit to enable withdrawals.'
+                    : kycStatus === 'IN_REVIEW'
+                    ? 'Your documents are being reviewed. This usually takes 24-48 hours. You\'ll be notified once approved.'
+                    : 'Complete identity verification to enable withdrawals and access all features.'}
+                </p>
+                <button
+                  onClick={() => navigate('/farmer/kyc')}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                    kycStatus === 'REJECTED'
+                      ? 'bg-destructive text-destructive-foreground'
+                      : kycStatus === 'IN_REVIEW'
+                      ? 'bg-farm-info text-white'
+                      : 'bg-farm-warning text-foreground'
+                  }`}
+                >
+                  {kycStatus === 'REJECTED' 
+                    ? 'Resubmit Documents' 
+                    : kycStatus === 'IN_REVIEW'
+                    ? 'View Status'
+                    : 'Complete Verification'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Wallet Card */}
         <WalletCard
@@ -50,22 +108,97 @@ const FarmerDashboard = () => {
           onWithdraw={() => navigate('/farmer/wallet')}
         />
 
-        {/* Primary CTA */}
+        {/* Primary CTA - Blocked if KYC not approved */}
         <button
-          onClick={() => navigate('/farmer/create-listing')}
-          className="w-full p-5 bg-primary text-primary-foreground rounded-2xl flex items-center justify-between btn-glow transition-all hover:scale-[1.02]"
+          onClick={() => {
+            if (!isKYCApproved) {
+              navigate('/farmer/kyc');
+            } else {
+              navigate('/farmer/create-listing');
+            }
+          }}
+          disabled={!isKYCApproved}
+          className={`w-full p-5 rounded-lg flex items-center justify-between transition-all ${
+            isKYCApproved
+              ? 'bg-primary text-primary-foreground hover:opacity-90'
+              : 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
+          }`}
         >
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+              isKYCApproved ? 'bg-primary-foreground/20' : 'bg-muted-foreground/10'
+            }`}>
               <Plus className="w-6 h-6" />
             </div>
             <div className="text-left">
-              <p className="font-display font-bold text-lg">List New Produce</p>
-              <p className="text-sm opacity-80">Start selling today</p>
+              <p className="font-display font-bold text-lg">
+                {isKYCApproved ? 'List New Produce' : 'Complete KYC to List Produce'}
+              </p>
+              <p className="text-sm opacity-80">
+                {isKYCApproved ? 'Start selling today' : 'Verification required to create listings'}
+              </p>
             </div>
           </div>
           <ChevronRight className="w-6 h-6" />
         </button>
+
+        {/* Verification Status Badge */}
+        <div className="farm-card bg-gradient-to-r from-[#F0FDF4] to-white border border-[#BBF7D0]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                isKYCApproved 
+                  ? 'bg-[#22C55E]/10' 
+                  : kycStatus === 'IN_REVIEW'
+                  ? 'bg-farm-info/10'
+                  : kycStatus === 'REJECTED'
+                  ? 'bg-destructive/10'
+                  : 'bg-farm-warning/10'
+              }`}>
+                <Shield className={`w-6 h-6 ${
+                  isKYCApproved 
+                    ? 'text-[#22C55E]' 
+                    : kycStatus === 'IN_REVIEW'
+                    ? 'text-farm-info'
+                    : kycStatus === 'REJECTED'
+                    ? 'text-destructive'
+                    : 'text-farm-warning'
+                }`} />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">
+                  Verification Status: 
+                  <span className={`ml-2 ${
+                    isKYCApproved 
+                      ? 'text-[#22C55E]' 
+                      : kycStatus === 'IN_REVIEW'
+                      ? 'text-farm-info'
+                      : kycStatus === 'REJECTED'
+                      ? 'text-destructive'
+                      : 'text-farm-warning'
+                  }`}>
+                    {isKYCApproved ? 'Approved' : 
+                     kycStatus === 'IN_REVIEW' ? 'Under Review' :
+                     kycStatus === 'REJECTED' ? 'Rejected' : 'Pending'}
+                  </span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {isKYCApproved 
+                    ? 'All features enabled' 
+                    : 'Complete verification to access all features'}
+                </p>
+              </div>
+            </div>
+            {!isKYCApproved && (
+              <button
+                onClick={() => navigate('/farmer/kyc')}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+              >
+                Verify Now
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -181,18 +314,14 @@ const FarmerDashboard = () => {
                   className="flex gap-3 p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
                 >
                   <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {listing.photos && listing.photos.length > 0 && listing.photos[0] ? (
-                      <img 
-                        src={listing.photos[0]} 
-                        alt={listing.commodity} 
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <Package className="w-6 h-6 text-muted-foreground" />
-                    )}
+                    <img 
+                      src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)} 
+                      alt={listing.commodity} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = getProduceImage(listing.commodity);
+                      }}
+                    />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-foreground">{listing.commodity}</p>

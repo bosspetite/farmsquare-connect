@@ -144,7 +144,7 @@ const AuthPage = () => {
                 <button
                   type="submit"
                   disabled={phone.length < 10}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-2xl text-lg font-medium btn-glow transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Continue
                 </button>
@@ -181,7 +181,7 @@ const AuthPage = () => {
                 <button
                   type="submit"
                   disabled={!otp.every(d => d !== '')}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-2xl text-lg font-medium btn-glow transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Verify
                 </button>
@@ -269,7 +269,7 @@ const AuthPage = () => {
                 <button
                   type="submit"
                   disabled={!name || !region}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-2xl text-lg font-medium btn-glow transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Check className="w-5 h-5" />
                   Complete Setup
