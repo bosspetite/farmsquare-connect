@@ -292,3 +292,5 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
 
 export default PaymentGateway;
 
+
+

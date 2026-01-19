@@ -304,3 +304,5 @@ const AgentInspectionDetail = () => {
 
 export default AgentInspectionDetail;
 
+
+
