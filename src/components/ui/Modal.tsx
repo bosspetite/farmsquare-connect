@@ -19,12 +19,25 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only close if clicking directly on backdrop, not on modal content
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    // Prevent modal from closing on swipe gestures
+    e.stopPropagation();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleBackdropClick}
+        onTouchStart={handleTouchStart}
       />
       
       {/* Modal */}
@@ -34,6 +47,8 @@ export const Modal: React.FC<ModalProps> = ({
           'max-h-[85vh] overflow-y-auto',
           className
         )}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-display font-semibold text-foreground">
