@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle, Clock, CheckCircle, DollarSign } from 'lucide-react';
+import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle, Clock, CheckCircle, DollarSign, Copy, Receipt, X } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, getKYCByUserId, getOrdersByFarmerId, formatNaira, formatDate } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
+import { Transaction } from '@/types';
 
 const banks = [
   'GTBank',
@@ -34,6 +35,7 @@ const FarmerWallet = () => {
   const [amount, setAmount] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [tab, setTab] = useState<'transactions' | 'withdrawals'>('transactions');
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const wallet = user ? getWalletByUserId(user.id) : null;
   const transactions = user ? getTransactionsByUserId(user.id) : [];
@@ -199,7 +201,11 @@ const FarmerWallet = () => {
                   <p className="text-xs text-muted-foreground">{transactions.length} total</p>
                 </div>
                 {transactions.map((txn) => (
-                  <div key={txn.id} className="farm-card flex items-center gap-4 hover:bg-muted/50 transition-colors">
+                  <div 
+                    key={txn.id} 
+                    onClick={() => setSelectedTransaction(txn)}
+                    className="farm-card flex items-center gap-4 hover:bg-muted/50 transition-colors cursor-pointer active:scale-[0.98]"
+                  >
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                       txn.type === 'Credit' ? 'bg-farm-success/10' : 'bg-destructive/10'
                     }`}>
