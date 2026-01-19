@@ -184,28 +184,30 @@ export const AgentLayout: React.FC<AgentLayoutProps> = ({ children }) => {
       {/* Main Content */}
       <div className="lg:pl-64">
         <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-4 bg-background/95 backdrop-blur-sm border-b border-border lg:px-8">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden w-10 h-10 rounded-xl bg-card flex items-center justify-center"
+              className="lg:hidden w-10 h-10 rounded-xl bg-card flex items-center justify-center flex-shrink-0"
+              aria-label="Open menu"
             >
               <Menu className="w-5 h-5 text-foreground" />
             </button>
-            <div className="lg:hidden flex items-center gap-2">
+            <div className="lg:hidden flex items-center gap-2 flex-shrink-0">
               <img src={logo} alt="FarmSquare" className="w-8 h-8" />
             </div>
-            <div className="hidden lg:block">
-              <p className="text-lg font-display font-semibold text-foreground">
+            <div className="hidden lg:block min-w-0">
+              <p className="text-lg font-display font-semibold text-foreground truncate">
                 Field Agent: {user?.name || 'Agent'}
               </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <div className="relative">
               <button 
                 onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors"
+                className="relative w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+                aria-label="Notifications"
               >
                 <Bell className="w-5 h-5 text-foreground" />
                 {unreadCount > 0 && (
@@ -277,14 +279,16 @@ export const AgentLayout: React.FC<AgentLayoutProps> = ({ children }) => {
             </div>
             <button 
               onClick={() => navigate('/agent/profile')}
-              className="w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors"
+              className="w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+              aria-label="Settings"
             >
               <Settings className="w-5 h-5 text-foreground" />
             </button>
             <button 
               onClick={() => setShowSignOutModal(true)}
-              className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors border border-destructive/20"
+              className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors border border-destructive/20 flex-shrink-0"
               title="Sign Out"
+              aria-label="Sign Out"
             >
               <LogOut className="w-5 h-5 text-destructive" />
             </button>

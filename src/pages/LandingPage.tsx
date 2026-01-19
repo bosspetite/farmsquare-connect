@@ -155,7 +155,7 @@ const LandingPage = () => {
         {/* Hero Content Overlay */}
         <div className="relative z-10 h-full flex items-center justify-center">
           <div className="container mx-auto px-4 py-20">
-            <div className="max-w-4xl mx-auto text-center">
+            <div className="max-w-4xl mx-auto text-center px-4 md:px-0">
               {/* Badge */}
               <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/95 backdrop-blur-sm border border-white/20 rounded-full text-[#166534] text-sm font-semibold mb-8 shadow-lg">
                 Nigeria's B2B Agro Marketplace
@@ -195,17 +195,17 @@ const LandingPage = () => {
         {/* Navigation Arrows */}
         <button
           onClick={goToPrevious}
-          className="absolute left-6 top-1/2 -translate-y-1/2 z-20 bg-white/90 hover:bg-white text-gray-900 rounded-full p-4 shadow-2xl transition-all hover:scale-110 backdrop-blur-sm"
+          className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 z-20 bg-white/90 hover:bg-white text-gray-900 rounded-full p-2 md:p-4 shadow-2xl transition-all hover:scale-110 backdrop-blur-sm"
           aria-label="Previous slide"
         >
-          <ChevronLeft className="w-6 h-6" />
+          <ChevronLeft className="w-4 h-4 md:w-6 md:h-6" />
         </button>
         <button
           onClick={goToNext}
-          className="absolute right-6 top-1/2 -translate-y-1/2 z-20 bg-white/90 hover:bg-white text-gray-900 rounded-full p-4 shadow-2xl transition-all hover:scale-110 backdrop-blur-sm"
+          className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 z-20 bg-white/90 hover:bg-white text-gray-900 rounded-full p-2 md:p-4 shadow-2xl transition-all hover:scale-110 backdrop-blur-sm"
           aria-label="Next slide"
         >
-          <ChevronRight className="w-6 h-6" />
+          <ChevronRight className="w-4 h-4 md:w-6 md:h-6" />
         </button>
 
         {/* Dots Indicator */}

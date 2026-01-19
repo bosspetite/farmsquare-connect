@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight, Eye, DollarSign, CheckCircle, AlertCircle, Shield, Camera, Info } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
@@ -21,6 +22,19 @@ const FarmerDashboard = () => {
   
   const kycStatus = kycData?.status || 'NOT_STARTED';
   const isKYCApproved = kycStatus === 'APPROVED';
+  
+  // Redirect to KYC if verification not started (new users)
+  useEffect(() => {
+    if (user && kycStatus === 'NOT_STARTED') {
+      // Check if this is a new user (no KYC data at all)
+      // Redirect to KYC page for first-time users
+      const hasSeenKYC = sessionStorage.getItem(`kyc_seen_${user.id}`);
+      if (!hasSeenKYC) {
+        navigate('/farmer/kyc');
+        sessionStorage.setItem(`kyc_seen_${user.id}`, 'true');
+      }
+    }
+  }, [user, kycStatus, navigate]);
   
   // Calculate stats
   const activeListings = listings.filter(l => l.status === 'Active').length;

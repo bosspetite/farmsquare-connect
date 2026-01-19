@@ -7,7 +7,26 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getWalletByUserId, getTransactionsByUserId, getWithdrawalsByUserId, addWithdrawal, getKYCByUserId, getOrdersByFarmerId, formatNaira, formatDate } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 
-const banks = ['GTBank', 'Access Bank', 'Zenith Bank', 'First Bank', 'UBA'];
+const banks = [
+  'GTBank',
+  'Access Bank',
+  'Zenith Bank',
+  'First Bank',
+  'UBA',
+  'Fidelity Bank',
+  'Union Bank',
+  'Stanbic IBTC',
+  'FCMB',
+  'Sterling Bank',
+  'Wema Bank',
+  'Providus Bank',
+  'Kuda Bank',
+  'Opay',
+  'Palmpay',
+  'Moniepoint',
+  'Carbon',
+  'FairMoney',
+];
 
 const FarmerWallet = () => {
   const { user } = useAuth();
@@ -293,13 +312,15 @@ const FarmerWallet = () => {
                 </p>
               </div>
             )}
-            <button
-              onClick={handleWithdraw}
-              disabled={!amount || !selectedBank || !isKYCApproved}
-              className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
-            >
-              Submit Request
-            </button>
+            <div className="pt-2">
+              <button
+                onClick={handleWithdraw}
+                disabled={!amount || !selectedBank || !isKYCApproved}
+                className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+              >
+                Submit Request
+              </button>
+            </div>
           </div>
         </Modal>
       </div>
