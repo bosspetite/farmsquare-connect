@@ -11,25 +11,20 @@ export default defineConfig(({ mode }) => {
   const repoName = "farmsquare-connect";
   
   // Determine base path:
-  // Priority: VERCEL > VITE_BASE_PATH > default production
-  // Vercel always uses root "/"
-  // GitHub Pages uses "/farmsquare-connect/"
-  let base = "/";
+  // Priority: VITE_BASE_PATH > default root
+  // Vercel: Uses "/" (no VITE_BASE_PATH set)
+  // GitHub Pages: Uses "/farmsquare-connect/" (VITE_BASE_PATH set in workflow)
+  // Local dev: Uses "/" (no VITE_BASE_PATH set)
+  let base = "/"; // Default to root (works for Vercel and local dev)
   
-  // Check for Vercel first (Vercel sets VERCEL=1 automatically)
-  if (process.env.VERCEL === "1" || process.env.VERCEL_ENV) {
-    base = "/"; // Vercel - always root
-  } else if (process.env.VITE_BASE_PATH) {
-    // Explicitly set for GitHub Actions/GitHub Pages
+  // Only use repo path if explicitly set (GitHub Actions/GitHub Pages)
+  if (process.env.VITE_BASE_PATH) {
     base = process.env.VITE_BASE_PATH;
-  } else if (mode === "production") {
-    // Default production build (GitHub Pages)
-    base = `/${repoName}/`;
   }
   
   // Log for debugging (only in build, not in dev)
   if (mode === "production") {
-    console.log(`[Vite Config] Base path: "${base}" | VERCEL: ${process.env.VERCEL} | VITE_BASE_PATH: ${process.env.VITE_BASE_PATH || "not set"}`);
+    console.log(`[Vite Config] Base path: "${base}" | VERCEL: ${process.env.VERCEL} | VITE_BASE_PATH: ${process.env.VITE_BASE_PATH || "not set"} | GITHUB_ACTIONS: ${process.env.GITHUB_ACTIONS || "not set"}`);
   }
 
   return {
