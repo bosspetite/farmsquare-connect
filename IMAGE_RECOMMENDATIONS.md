@@ -54,3 +54,4 @@ The landing page carousel currently uses 5 existing images. We need 3 more beaut
 - Good lighting and vibrant colors
 - Authentic Nigerian agricultural context when possible
 - Professional quality (not blurry or pixelated)
+
