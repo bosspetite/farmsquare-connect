@@ -60,3 +60,4 @@ export const getProduceImages = (commodity: string): string[] => {
   
   return images;
 };
+

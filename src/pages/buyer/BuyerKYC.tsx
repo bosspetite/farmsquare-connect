@@ -534,3 +534,4 @@ const BuyerKYC = () => {
 };
 
 export default BuyerKYC;
+

@@ -64,3 +64,4 @@ export const SignOutModal: React.FC<SignOutModalProps> = ({
     </Modal>
   );
 };
+

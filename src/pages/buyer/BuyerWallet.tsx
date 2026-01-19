@@ -294,3 +294,4 @@ const BuyerWallet = () => {
 };
 
 export default BuyerWallet;
+
