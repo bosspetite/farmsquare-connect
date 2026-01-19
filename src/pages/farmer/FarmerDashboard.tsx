@@ -25,13 +25,19 @@ const FarmerDashboard = () => {
   
   // Redirect to KYC if verification not started (new users)
   useEffect(() => {
-    if (user && kycStatus === 'NOT_STARTED') {
-      // Check if this is a new user (no KYC data at all)
-      // Redirect to KYC page for first-time users
-      const hasSeenKYC = sessionStorage.getItem(`kyc_seen_${user.id}`);
-      if (!hasSeenKYC) {
-        navigate('/farmer/kyc');
-        sessionStorage.setItem(`kyc_seen_${user.id}`, 'true');
+    // Only redirect if user exists and KYC is not started
+    if (user?.id && kycStatus === 'NOT_STARTED') {
+      try {
+        // Check if this is a new user (no KYC data at all)
+        // Redirect to KYC page for first-time users
+        const hasSeenKYC = sessionStorage.getItem(`kyc_seen_${user.id}`);
+        if (!hasSeenKYC) {
+          sessionStorage.setItem(`kyc_seen_${user.id}`, 'true');
+          navigate('/farmer/kyc');
+        }
+      } catch (error) {
+        // Silently fail if sessionStorage is not available
+        console.warn('Could not check KYC redirect:', error);
       }
     }
   }, [user, kycStatus, navigate]);
