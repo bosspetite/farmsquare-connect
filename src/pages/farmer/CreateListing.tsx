@@ -170,12 +170,12 @@ const CreateListing = () => {
             <h2 className="text-xl font-display font-bold text-foreground">What are you selling?</h2>
             <div className="grid grid-cols-2 gap-3">
               {commodities.map((c) => (
-                <button key={c} onClick={() => setCommodity(c)} className={`p-4 rounded-xl border text-left transition-all ${commodity === c ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}>
-                  <span className="font-medium text-foreground">{c}</span>
+                <button key={c} onClick={() => setCommodity(c)} className={`p-4 rounded-xl border text-left transition-all min-h-[72px] active:scale-[0.98] ${commodity === c ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}>
+                  <span className="font-medium text-foreground text-base">{c}</span>
                 </button>
               ))}
             </div>
-            <button onClick={handleNext} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium mt-4">Continue</button>
+            <button onClick={handleNext} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold mt-4 min-h-[52px] active:scale-[0.98]">Continue</button>
           </div>
         )}
 
@@ -183,10 +183,10 @@ const CreateListing = () => {
           <div className="space-y-4">
             <h2 className="text-xl font-display font-bold text-foreground">How much {commodity}?</h2>
             <div className="relative">
-              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Enter quantity" className="w-full px-4 py-4 pr-12 bg-card border border-border rounded-xl text-foreground text-lg" />
+              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Enter quantity" className="w-full px-4 py-4 pr-12 bg-card border border-border rounded-xl text-foreground text-lg min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary" />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">kg</span>
             </div>
-            <button onClick={handleNext} disabled={!quantity} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50">Continue</button>
+            <button onClick={handleNext} disabled={!quantity} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]">Continue</button>
           </div>
         )}
 
@@ -222,7 +222,7 @@ const CreateListing = () => {
             <button 
               onClick={handleNext} 
               disabled={photos.length === 0}
-              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]"
             >
               Continue
             </button>
@@ -234,20 +234,20 @@ const CreateListing = () => {
             <h2 className="text-xl font-display font-bold text-foreground">Set your price</h2>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">₦</span>
-              <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" className="w-full pl-10 pr-16 py-4 bg-card border border-border rounded-xl text-foreground text-lg" />
+              <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" className="w-full pl-10 pr-16 py-4 bg-card border border-border rounded-xl text-foreground text-lg min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary" />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">per kg</span>
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">Quality Grade</label>
               <div className="flex gap-3">
                 {grades.map((g) => (
-                  <button key={g} onClick={() => setGrade(g)} className={`flex-1 py-3 rounded-xl border font-medium ${grade === g ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'}`}>
+                  <button key={g} onClick={() => setGrade(g)} className={`flex-1 py-3 rounded-xl border font-semibold min-h-[48px] active:scale-[0.98] ${grade === g ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'}`}>
                     Grade {g}
                   </button>
                 ))}
               </div>
             </div>
-            <button onClick={handleNext} disabled={!price} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50">Continue</button>
+            <button onClick={handleNext} disabled={!price} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]">Continue</button>
           </div>
         )}
 
@@ -330,13 +330,13 @@ const CreateListing = () => {
               <div className="flex gap-3">
                 <button 
                   onClick={() => setStep(3)} 
-                  className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-medium"
+                  className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98]"
                 >
                   Edit
                 </button>
                 <button 
                   onClick={handleSaveDraft} 
-                  className="flex-1 py-4 bg-muted text-foreground rounded-xl font-medium flex items-center justify-center gap-2"
+                  className="flex-1 py-4 bg-muted text-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                 >
                   <Save className="w-5 h-5" /> Save Draft
                 </button>
@@ -344,7 +344,7 @@ const CreateListing = () => {
               <button 
                 onClick={handlePublish} 
                 disabled={!price || !quantity || !isKYCApproved} 
-                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
               >
                 <Check className="w-5 h-5" /> 
                 {isKYCApproved ? 'Publish Listing' : 'KYC Required to Publish'}

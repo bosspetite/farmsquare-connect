@@ -131,10 +131,13 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-1 bg-card border-r border-border">
           <div className="px-6 py-5 border-b border-border">
-            <div className="flex items-center gap-3 mb-1">
+            <button 
+              onClick={() => navigate('/farmer/dashboard')}
+              className="flex items-center gap-3 mb-1 hover:opacity-80 transition-opacity w-full text-left"
+            >
               <img src={logo} alt="FarmSquare" className="w-10 h-10" />
               <span className="font-display font-bold text-lg text-foreground">FarmSquare</span>
-            </div>
+            </button>
             <p className="text-xs text-muted-foreground ml-13">Farmer</p>
           </div>
           
@@ -176,27 +179,33 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
             onClick={() => setSidebarOpen(false)}
           />
           <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border animate-slide-in-right flex flex-col">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border flex-shrink-0">
+              <button 
+                onClick={() => {
+                  navigate('/farmer/dashboard');
+                  setSidebarOpen(false);
+                }}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              >
                 <img src={logo} alt="FarmSquare" className="w-10 h-10" />
                 <div>
                   <span className="font-display font-bold text-lg text-foreground block">FarmSquare</span>
                   <p className="text-xs text-muted-foreground">Farmer</p>
                 </div>
-              </div>
-              <button onClick={() => setSidebarOpen(false)}>
+              </button>
+              <button onClick={() => setSidebarOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
             
-            <nav className="px-4 py-6 space-y-2 flex-1 overflow-y-auto">
+            <nav className="px-4 py-6 space-y-2 flex-1 overflow-y-auto pb-20">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all',
+                    'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all min-h-[44px]',
                     isActive(item.path)
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -208,10 +217,10 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
               ))}
             </nav>
             
-            <div className="p-4 border-t border-border bg-card">
+            <div className="p-4 border-t border-border bg-card sticky bottom-0 z-10 flex-shrink-0">
               <button
                 onClick={() => setShowSignOutModal(true)}
-                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-destructive hover:text-destructive-foreground hover:bg-destructive/10 transition-all border border-destructive/20"
+                className="flex items-center justify-center gap-3 w-full px-4 py-4 rounded-xl text-sm font-semibold text-white bg-destructive hover:bg-destructive/90 transition-all min-h-[52px] active:scale-[0.98]"
               >
                 <LogOut className="w-5 h-5" />
                 Sign Out
@@ -268,7 +277,7 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
                     className="fixed inset-0 z-40" 
                     onClick={() => setNotificationOpen(false)}
                   />
-                  <div className="absolute right-0 top-12 w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[500px] overflow-hidden flex flex-col">
+                  <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
                     <div className="p-4 border-b border-border flex items-center justify-between">
                       <h3 className="font-semibold text-foreground">Notifications</h3>
                       {unreadCount > 0 && (
@@ -351,31 +360,10 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
         />
 
         {/* Page Content */}
-        <main className="px-4 py-6 lg:px-8 pb-24 lg:pb-8">
+        <main className="px-4 py-6 lg:px-8 pb-8">
           {children}
         </main>
       </div>
-
-      {/* Mobile Bottom Nav */}
-      <nav className="bottom-nav lg:hidden">
-        <div className="flex items-center justify-around py-2">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all',
-                isActive(item.path)
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="text-xs font-medium">{item.label}</span>
-            </Link>
-          ))}
-        </div>
-      </nav>
     </div>
   );
 };

@@ -81,7 +81,38 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
-  // Generate notifications
+  // Generate notifications with refresh mechanism
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  useEffect(() => {
+    const refreshData = () => setRefreshKey(prev => prev + 1);
+    
+    // Refresh on mount
+    refreshData();
+    
+    // Refresh when window gains focus
+    window.addEventListener('focus', refreshData);
+    
+    // Refresh when localStorage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'farmsquare_state') refreshData();
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Refresh on custom events
+    window.addEventListener('farmsquare:state-changed', refreshData);
+    
+    // Refresh every 2 seconds
+    const interval = setInterval(refreshData, 2000);
+    
+    return () => {
+      window.removeEventListener('focus', refreshData);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('farmsquare:state-changed', refreshData);
+      clearInterval(interval);
+    };
+  }, []);
+  
   useEffect(() => {
     const state = getAppState();
     const newNotifications: typeof notifications = [];
@@ -120,7 +151,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     }
 
     setNotifications(newNotifications);
-  }, [location.pathname]);
+  }, [location.pathname, refreshKey]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -181,28 +212,34 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border animate-slide-in-right overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-              <div className="flex items-center gap-3">
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border animate-slide-in-right flex flex-col">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border flex-shrink-0">
+              <button 
+                onClick={() => {
+                  navigate('/admin/dashboard');
+                  setSidebarOpen(false);
+                }}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              >
                 <img src={logo} alt="FarmSquare" className="w-10 h-10" />
                 <div>
                   <span className="font-display font-bold text-lg text-foreground block">FarmSquare</span>
                   <p className="text-xs text-muted-foreground">Admin</p>
                 </div>
-              </div>
-              <button onClick={() => setSidebarOpen(false)}>
+              </button>
+              <button onClick={() => setSidebarOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
             
-            <nav className="px-4 py-6 space-y-1">
+            <nav className="px-4 py-6 space-y-1 flex-1 overflow-y-auto pb-20">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all',
+                    'flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all min-h-[44px]',
                     isActive(item.path)
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -213,6 +250,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                 </Link>
               ))}
             </nav>
+            
+            <div className="p-4 border-t border-border bg-card sticky bottom-0 z-10 flex-shrink-0">
+              <button
+                onClick={() => setShowSignOutModal(true)}
+                className="flex items-center justify-center gap-3 w-full px-4 py-4 rounded-xl text-sm font-semibold text-white bg-destructive hover:bg-destructive/90 transition-all min-h-[52px] active:scale-[0.98]"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign Out
+              </button>
+            </div>
           </aside>
         </div>
       )}
@@ -228,9 +275,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             >
               <Menu className="w-5 h-5 text-foreground" />
             </button>
-            <div className="lg:hidden flex items-center gap-2 flex-shrink-0">
+            <button 
+              onClick={() => navigate('/admin/dashboard')}
+              className="lg:hidden flex items-center gap-2 flex-shrink-0 hover:opacity-80 transition-opacity"
+            >
               <img src={logo} alt="FarmSquare" className="w-8 h-8" />
-            </div>
+            </button>
             <div className="hidden lg:block min-w-0">
               <p className="text-lg font-display font-semibold text-foreground truncate">
                 Admin Dashboard
@@ -260,7 +310,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                     className="fixed inset-0 z-40" 
                     onClick={() => setNotificationOpen(false)}
                   />
-                  <div className="absolute right-0 top-12 w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[500px] overflow-hidden flex flex-col">
+                  <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
                     <div className="p-4 border-b border-border flex items-center justify-between">
                       <h3 className="font-semibold text-foreground">Notifications</h3>
                       {unreadCount > 0 && (

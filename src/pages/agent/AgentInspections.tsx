@@ -52,7 +52,7 @@ const AgentInspections = () => {
             </div>
             <div className="space-y-3">
               {pendingOrders.map((order) => {
-                const listing = state.listings.find(l => l.id === order.listingId);
+                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -118,7 +118,7 @@ const AgentInspections = () => {
             </div>
             <div className="space-y-3">
               {inProgressOrders.map((order) => {
-                const listing = state.listings.find(l => l.id === order.listingId);
+                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -188,7 +188,7 @@ const AgentInspections = () => {
             </div>
             <div className="space-y-3">
               {completedOrders.slice(0, 10).map((order) => {
-                const listing = state.listings.find(l => l.id === order.listingId);
+                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}

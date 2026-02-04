@@ -1,26 +1,91 @@
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Package, TrendingUp, Clock, Store, Wallet, Shield, AlertCircle, CheckCircle } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useAuth } from '@/contexts/AuthContext';
-import { getOrdersByBuyerId, getAppState, formatNaira, formatTimeAgo, getWalletByUserId, getKYCByUserId } from '@/lib/store';
+import { getAppState, formatNaira, formatTimeAgo, getWalletByUserId, getKYCByUserId } from '@/lib/store';
 import { getProduceImage } from '@/utils/produceImages';
+import { useOrderStore } from '@/stores/orderStore';
 
 const BuyerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const state = getAppState();
+  // Use Zustand store for orders - single source of truth
+  const { getBuyerOrders, refreshOrders, subscribe } = useOrderStore();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [state, setState] = useState(getAppState());
+  const [buyerWallet, setBuyerWallet] = useState<any>(null);
+  const [kycData, setKycData] = useState<any>(null);
+
+  // Get orders from Zustand store - always refresh first
+  const orders = useMemo(() => {
+    if (!user) return [];
+    // Refresh store before getting orders to ensure we have latest data
+    refreshOrders();
+    return getBuyerOrders(user.id);
+  }, [user, refreshKey, getBuyerOrders, refreshOrders]);
+
+  // Subscribe to order changes for real-time updates
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      setRefreshKey(prev => prev + 1);
+    });
+
+    // Refresh on mount
+    refreshOrders();
+
+    // Refresh when window gains focus
+    const handleFocus = () => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Refresh when localStorage changes (cross-tab updates)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'farmsquare_state') {
+        refreshOrders();
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Refresh every 10 seconds for real-time updates
+    const interval = setInterval(() => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    }, 10000);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [subscribe, refreshOrders]);
+
+  // Update other state when user changes
+  useEffect(() => {
+    if (user) {
+      const currentState = getAppState();
+      setState(currentState);
+      setBuyerWallet(getWalletByUserId(user.id));
+      setKycData(getKYCByUserId(user.id));
+    } else {
+      setBuyerWallet(null);
+      setKycData(null);
+    }
+  }, [user, refreshKey]);
+
+  // Memoize calculations to prevent unnecessary recalculations
+  const activeOrders = useMemo(() => orders.filter(o => !['Delivered', 'Cancelled', 'Rejected'].includes(o.status)), [orders]);
+  const pendingOrders = useMemo(() => orders.filter(o => o.status === 'Pending'), [orders]);
+  const deliveredOrders = useMemo(() => orders.filter(o => o.status === 'Delivered'), [orders]);
+  const totalSpend = useMemo(() => deliveredOrders.reduce((sum, o) => sum + o.amount, 0), [deliveredOrders]);
+  const activeListings = useMemo(() => (state.listings || []).filter(l => l.status === 'Active'), [state.listings]);
   
-  const orders = user ? getOrdersByBuyerId(user.id) : [];
-  const activeOrders = orders.filter(o => !['Delivered', 'Cancelled', 'Rejected'].includes(o.status));
-  const pendingOrders = orders.filter(o => o.status === 'Pending');
-  const deliveredOrders = orders.filter(o => o.status === 'Delivered');
-  const totalSpend = deliveredOrders.reduce((sum, o) => sum + o.amount, 0);
-  const activeListings = state.listings.filter(l => l.status === 'Active');
-  
-  const buyerWallet = user ? getWalletByUserId(user.id) : null;
-  const kycData = user ? getKYCByUserId(user.id) : null;
   // Only verified if KYC data exists AND status is APPROVED
   const isVerified = kycData?.status === 'APPROVED';
 
@@ -38,48 +103,48 @@ const BuyerDashboard = () => {
             <div className="farm-card bg-farm-success/10 border-farm-success/20 flex items-center gap-3 flex-1">
               <CheckCircle className="w-5 h-5 text-farm-success" />
               <div>
-                <p className="font-semibold text-foreground text-sm">KYB Verification</p>
-                <p className="text-xs text-muted-foreground">Approved • You can place orders</p>
+                <p className="font-semibold text-foreground text-sm sm:text-base">KYB Verification</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Approved • You can place orders</p>
               </div>
             </div>
           ) : kycData?.status === 'IN_REVIEW' ? (
             <div className="farm-card bg-farm-info/10 border-farm-info/20 flex items-center gap-3 flex-1">
               <AlertCircle className="w-5 h-5 text-farm-info" />
               <div>
-                <p className="font-semibold text-foreground text-sm">KYB Verification</p>
-                <p className="text-xs text-muted-foreground">Pending Review • Orders disabled until approved</p>
+                <p className="font-semibold text-foreground text-sm sm:text-base">KYB Verification</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Pending Review • Orders disabled until approved</p>
               </div>
             </div>
           ) : kycData?.status === 'REJECTED' ? (
             <div className="farm-card bg-destructive/10 border-destructive/20 flex items-center gap-3 flex-1">
               <AlertCircle className="w-5 h-5 text-destructive" />
               <div className="flex-1">
-                <p className="font-semibold text-foreground text-sm">KYB Verification Rejected</p>
-                <p className="text-xs text-muted-foreground mb-2">Please resubmit your verification documents</p>
+                <p className="font-semibold text-foreground text-sm sm:text-base">KYB Verification Rejected</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-2">Please resubmit your verification documents</p>
                 <button
                   onClick={() => navigate('/buyer/kyc')}
-                  className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded-lg text-xs font-medium"
+                  className="px-3 py-1.5 bg-destructive text-destructive-foreground rounded-lg text-xs sm:text-sm font-medium"
                 >
                   Resubmit
                 </button>
               </div>
             </div>
           ) : (
-            <div className="farm-card bg-farm-warning/10 border-farm-warning/20 flex items-center justify-between flex-1">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-farm-warning/20 flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-farm-warning" />
+            <div className="farm-card bg-farm-warning/10 border-farm-warning/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 flex-1">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-farm-warning/20 flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-farm-warning" />
                 </div>
-                <div>
-                  <p className="font-semibold text-foreground">Verification Required</p>
-                  <p className="text-sm text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground text-sm sm:text-base">Verification Required</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Complete your KYC/KYB verification to place orders and access all features
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => navigate('/buyer/kyc')}
-                className="px-5 py-2.5 bg-farm-warning text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-2.5 bg-farm-warning text-white rounded-lg text-xs sm:text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <Shield className="w-4 h-4" />
                 Verify Now
@@ -89,7 +154,7 @@ const BuyerDashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             icon={ShoppingCart}
             label="Active Orders"
@@ -126,20 +191,104 @@ const BuyerDashboard = () => {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Available</p>
-                <p className="text-xl font-bold text-foreground">{formatNaira(buyerWallet.available)}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1">Available</p>
+                <p className="text-xl sm:text-2xl font-bold text-foreground">{formatNaira(buyerWallet.available)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">In Escrow</p>
-                <p className="text-xl font-bold text-farm-warning">{formatNaira(buyerWallet.pending)}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1">In Escrow</p>
+                <p className="text-xl sm:text-2xl font-bold text-farm-warning">{formatNaira(buyerWallet.pending)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Total</p>
-                <p className="text-xl font-bold text-primary">{formatNaira(buyerWallet.available + buyerWallet.pending)}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1">Total</p>
+                <p className="text-xl sm:text-2xl font-bold text-primary">{formatNaira(buyerWallet.available + buyerWallet.pending)}</p>
               </div>
             </div>
           </div>
         )}
+
+        {/* Featured Produce - 6 Main Produce Types */}
+        <div className="farm-card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-display font-semibold text-foreground text-lg">Featured Produce</h3>
+              <p className="text-sm sm:text-base text-muted-foreground">Browse our top farm produce</p>
+            </div>
+            <button 
+              onClick={() => navigate('/buyer/marketplace')}
+              className="text-sm sm:text-base text-primary font-medium hover:underline"
+            >
+              View All
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { name: 'Maize', grade: 'A' as const },
+              { name: 'Cassava', grade: 'B' as const },
+              { name: 'Rice', grade: 'A' as const },
+              { name: 'Yam', grade: 'A' as const },
+              { name: 'Sorghum', grade: 'B' as const },
+              { name: 'Tomatoes', grade: 'A' as const },
+            ].map((produce) => {
+              const listing = activeListings.find(l => 
+                l.commodity.toLowerCase() === produce.name.toLowerCase() && 
+                l.grade === produce.grade
+              ) || activeListings.find(l => 
+                l.commodity.toLowerCase() === produce.name.toLowerCase()
+              );
+              
+              return (
+                <div
+                  key={produce.name}
+                  onClick={() => {
+                    if (listing) {
+                      navigate(`/buyer/listings/${listing.id}`);
+                    } else {
+                      navigate('/buyer/marketplace', { state: { filter: produce.name } });
+                    }
+                  }}
+                  className="group cursor-pointer"
+                >
+                  <div className="relative w-full aspect-square rounded-xl bg-muted overflow-hidden mb-2 border border-border group-hover:border-primary/50 transition-all">
+                    <img
+                      src={listing && listing.photos && listing.photos.length > 0 
+                        ? listing.photos[0] 
+                        : getProduceImage(produce.name)}
+                      alt={produce.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      onError={(e) => {
+                        e.currentTarget.src = getProduceImage(produce.name);
+                      }}
+                    />
+                    {/* Grade Badge */}
+                    <div className="absolute top-2 left-2">
+                      <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${
+                        produce.grade === 'A' ? 'bg-farm-success/90 text-white' :
+                        produce.grade === 'B' ? 'bg-farm-warning/90 text-white' :
+                        'bg-farm-brown/90 text-white'
+                      }`}>
+                        Grade {produce.grade}
+                      </span>
+                    </div>
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <span className="text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity bg-primary px-3 py-1.5 rounded-lg">
+                        View
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-semibold text-sm sm:text-base text-foreground">{produce.name}</p>
+                    {listing && (
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        {formatNaira(listing.pricePerKg)}/kg
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
@@ -150,8 +299,8 @@ const BuyerDashboard = () => {
             <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
               <Store className="w-7 h-7 text-primary" />
             </div>
-            <p className="font-semibold text-foreground mb-1">Browse Marketplace</p>
-            <p className="text-xs text-muted-foreground">{activeListings.length} listings</p>
+            <p className="font-semibold text-sm sm:text-base text-foreground mb-1">Browse Marketplace</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">{activeListings.length} listings</p>
           </button>
           <button
             onClick={() => navigate('/buyer/orders')}
@@ -160,8 +309,8 @@ const BuyerDashboard = () => {
             <div className="w-14 h-14 rounded-xl bg-farm-info/10 flex items-center justify-center mx-auto mb-3">
               <ShoppingCart className="w-7 h-7 text-farm-info" />
             </div>
-            <p className="font-semibold text-foreground mb-1">View Orders</p>
-            <p className="text-xs text-muted-foreground">{activeOrders.length} active</p>
+            <p className="font-semibold text-sm sm:text-base text-foreground mb-1">View Orders</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">{activeOrders.length} active</p>
           </button>
           <button
             onClick={() => navigate('/buyer/wallet')}
@@ -170,8 +319,8 @@ const BuyerDashboard = () => {
             <div className="w-14 h-14 rounded-xl bg-farm-success/10 flex items-center justify-center mx-auto mb-3">
               <Wallet className="w-7 h-7 text-farm-success" />
             </div>
-            <p className="font-semibold text-foreground mb-1">View Wallet</p>
-            <p className="text-xs text-muted-foreground">{buyerWallet ? formatNaira(buyerWallet.available) : '₦0'}</p>
+            <p className="font-semibold text-sm sm:text-base text-foreground mb-1">View Wallet</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">{buyerWallet ? formatNaira(buyerWallet.available) : '₦0'}</p>
           </button>
         </div>
 
@@ -198,7 +347,7 @@ const BuyerDashboard = () => {
           ) : (
             <div className="space-y-3">
               {orders.slice(0, 5).map((order) => {
-                const listing = state.listings.find(l => l.id === order.listingId);
+                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -217,11 +366,11 @@ const BuyerDashboard = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-foreground">{order.commodity}</span>
-                        <span className="text-sm text-muted-foreground">• {order.quantityKg}kg</span>
+                        <span className="font-semibold text-sm sm:text-base text-foreground">{order.commodity}</span>
+                        <span className="text-sm sm:text-base text-muted-foreground">• {order.quantityKg}kg</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-1">{order.farmerName}</p>
-                      <p className="text-xs text-muted-foreground">{formatTimeAgo(order.createdAt)}</p>
+                      <p className="text-sm sm:text-base text-muted-foreground mb-1">{order.farmerName}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">{formatTimeAgo(order.createdAt)}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="font-semibold text-foreground mb-2">{formatNaira(order.amount)}</p>
@@ -240,7 +389,7 @@ const BuyerDashboard = () => {
           <div className="grid grid-cols-3 gap-4">
             {['A', 'B', 'C'].map((grade) => {
               const count = deliveredOrders.filter(o => 
-                state.listings.find(l => l.id === o.listingId)?.grade === grade
+                (state.listings || []).find(l => l.id === o.listingId)?.grade === grade
               ).length;
               return (
                 <div key={grade} className="text-center p-4 bg-muted/50 rounded-xl">

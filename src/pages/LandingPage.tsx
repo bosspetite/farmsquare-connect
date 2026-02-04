@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Truck, Shield, TrendingUp, Users, ChevronRight, Package, ChevronLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Truck, Shield, TrendingUp, Users, ChevronRight, Package, ChevronLeft, CheckCircle2, Quote } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import farmProduceImg from '@/assets/agricultural farm produce.jpg';
 import farmersTomatoesImg from '@/assets/farmers with tomatoes.jpg';
@@ -597,6 +597,126 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* Testimonials Section */}
+      <section className="py-20 md:py-28 px-4 bg-gradient-to-b from-white via-[#FAFAFA] to-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(34,197,94,0.03),transparent_50%)] pointer-events-none"></div>
+        <div className="container mx-auto relative z-10">
+          <div className="text-center mb-14 md:mb-20">
+            <div className="inline-block mb-4">
+              <span className="text-sm font-semibold text-[#22C55E] uppercase tracking-wider bg-[#F0FDF4] px-4 py-2 rounded-full">
+                Trusted by Thousands
+              </span>
+            </div>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+              Testimonials
+            </h2>
+            <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
+              Real stories from farmers, buyers, and logistics partners.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto">
+            {[
+              {
+                role: 'Farmer',
+                name: 'Musa B.',
+                quote: 'Before Farm Square, I lost 30% of my harvest to middleman delays. Now, my produce is sold before I even finish harvesting.',
+                initials: 'MB',
+                gradient: 'from-[#F0FDF4] to-[#DCFCE7]',
+              },
+              {
+                role: 'Wholesaler',
+                name: 'Chinelo O.',
+                quote: 'Sourcing organic produce used to take days of travel. I can now verify quality and lock in prices directly from my phone.',
+                initials: 'CO',
+                gradient: 'from-[#ECFDF5] to-[#D1FAE5]',
+              },
+              {
+                role: 'Logistics',
+                name: 'David E.',
+                quote: 'The platform makes scheduling pickups easy. It\'s the first time I\'ve felt like part of a truly organized supply chain.',
+                initials: 'DE',
+                gradient: 'from-[#F0FDF4] to-[#DCFCE7]',
+              },
+            ].map((testimonial, i) => (
+              <div 
+                key={i} 
+                className="group bg-white rounded-2xl p-6 md:p-8 border border-gray-200 hover:border-[#22C55E] hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#22C55E]/5 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="relative z-10">
+                  <div className="flex items-start gap-4 mb-5">
+                    <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${testimonial.gradient} border-2 border-[#BBF7D0] flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow duration-300`}>
+                      <span className="text-base font-bold text-[#166534]">{testimonial.initials}</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Quote className="w-5 h-5 text-[#22C55E]" />
+                        <span className="text-xs font-semibold text-[#22C55E] uppercase tracking-wide">{testimonial.role}</span>
+                      </div>
+                      <p className="font-bold text-gray-900 text-base">{testimonial.name}</p>
+                    </div>
+                  </div>
+                  <p className="text-gray-700 leading-relaxed text-base md:text-lg italic relative pl-4 border-l-2 border-[#BBF7D0]">
+                    "{testimonial.quote}"
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Partners Section */}
+      <section className="py-20 md:py-28 px-4 bg-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(34,197,94,0.02)_0%,transparent_100%)] pointer-events-none"></div>
+        <div className="container mx-auto relative z-10">
+          <div className="text-center mb-14 md:mb-20">
+            <div className="inline-block mb-4">
+              <span className="text-sm font-semibold text-[#22C55E] uppercase tracking-wider bg-[#F0FDF4] px-4 py-2 rounded-full">
+                Trusted Ecosystem
+              </span>
+            </div>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+              Partners
+            </h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              Working with trusted partners to build a stronger agricultural supply chain
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6 max-w-6xl mx-auto">
+            {[
+              { name: 'Partner Logo', icon: '🏢' },
+              { name: 'Agro Co-op', icon: '🌾' },
+              { name: 'Logistics Partner', icon: '🚚' },
+              { name: 'Quality Assurance', icon: '✅' },
+              { name: 'Payments Partner', icon: '💳' },
+              { name: 'Farm Inputs', icon: '🌱' },
+            ].map((partner, i) => (
+              <div
+                key={i}
+                className="group bg-gradient-to-br from-white to-[#FAFAFA] rounded-2xl p-6 md:p-8 border-2 border-gray-200 hover:border-[#22C55E] hover:shadow-xl transition-all duration-300 flex flex-col items-center justify-center min-h-[140px] text-center transform hover:-translate-y-1 relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-[#22C55E]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="relative z-10">
+                  <div className="text-3xl md:text-4xl mb-3 transform group-hover:scale-110 transition-transform duration-300">
+                    {partner.icon}
+                  </div>
+                  <p className="text-xs md:text-sm font-semibold text-gray-700 group-hover:text-[#166534] transition-colors duration-300">
+                    {partner.name}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <p className="text-center text-xs text-gray-500 mt-8 italic">
+            Partner logos are placeholders and will be updated.
+          </p>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="py-12 px-4 border-t border-[#BBF7D0] bg-gradient-to-b from-[#F0FDF4] to-white">
         <div className="container mx-auto">
@@ -623,6 +743,9 @@ const LandingPage = () => {
                 <Link to="/faq" className="block text-sm text-gray-600 hover:text-[#22C55E] transition-colors duration-300">
                   FAQ
                 </Link>
+                <Link to="/support" className="block text-sm text-gray-600 hover:text-[#22C55E] transition-colors duration-300">
+                  Support
+                </Link>
               </div>
             </div>
             
@@ -639,13 +762,16 @@ const LandingPage = () => {
             </div>
             
             <div>
-              <h4 className="font-semibold text-gray-900 mb-4">Legal</h4>
+              <h4 className="font-semibold text-gray-900 mb-4">Legal & Support</h4>
               <div className="space-y-2">
                 <Link to="/terms" className="block text-sm text-gray-600 hover:text-[#22C55E] transition-colors duration-300">
                   Terms of Service
                 </Link>
                 <Link to="/privacy" className="block text-sm text-gray-600 hover:text-[#22C55E] transition-colors duration-300">
                   Privacy Policy
+                </Link>
+                <Link to="/support" className="block text-sm text-gray-600 hover:text-[#22C55E] transition-colors duration-300">
+                  Support
                 </Link>
               </div>
             </div>

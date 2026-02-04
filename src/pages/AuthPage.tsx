@@ -15,7 +15,7 @@ const roles = [
   { id: 'admin' as UserRole, icon: Shield, label: 'Admin', description: 'Manage the platform' },
 ];
 
-const regions = ['Kaduna', 'Kano', 'Lagos', 'Oyo', 'Benue', 'Niger', 'Plateau', 'Nasarawa'];
+const regions = ['Kaduna', 'Kano', 'Lagos', 'Oyo', 'Benue', 'Niger', 'Plateau', 'Nasarawa', 'Ekiti', 'Kogi', 'Kwara', 'Osun'];
 
 const AuthPage = () => {
   const navigate = useNavigate();
@@ -127,16 +127,16 @@ const AuthPage = () => {
               
               <form onSubmit={handlePhoneSubmit} className="space-y-4">
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 text-muted-foreground">
-                    <Phone className="w-5 h-5" />
-                    <span className="text-sm">+234</span>
+                  <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 sm:gap-2 text-muted-foreground">
+                    <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="text-xs sm:text-sm">+234</span>
                   </div>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                     placeholder="8012345678"
-                    className="w-full pl-24 pr-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-lg"
+                    className="w-full pl-20 sm:pl-24 pr-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-lg min-h-[52px]"
                     maxLength={10}
                   />
                 </div>
@@ -144,7 +144,7 @@ const AuthPage = () => {
                 <button
                   type="submit"
                   disabled={phone.length < 10}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] min-h-[52px]"
                 >
                   Continue
                 </button>
@@ -163,7 +163,7 @@ const AuthPage = () => {
               </p>
               
               <form onSubmit={handleOtpSubmit} className="space-y-6">
-                <div className="flex gap-3 justify-center">
+                <div className="flex gap-2 sm:gap-3 justify-center px-2">
                   {otp.map((digit, index) => (
                     <input
                       key={index}
@@ -172,7 +172,7 @@ const AuthPage = () => {
                       inputMode="numeric"
                       value={digit}
                       onChange={(e) => handleOtpChange(index, e.target.value)}
-                      className="w-12 h-14 bg-card border border-border rounded-xl text-center text-xl font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-11 h-14 sm:w-12 sm:h-14 bg-card border border-border rounded-xl text-center text-xl font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary flex-shrink-0"
                       maxLength={1}
                     />
                   ))}
@@ -181,7 +181,7 @@ const AuthPage = () => {
                 <button
                   type="submit"
                   disabled={!otp.every(d => d !== '')}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] min-h-[52px]"
                 >
                   Verify
                 </button>
@@ -211,14 +211,14 @@ const AuthPage = () => {
                   <button
                     key={role.id}
                     onClick={() => handleRoleSelect(role.id)}
-                    className="w-full p-4 farm-card-interactive flex items-center gap-4 text-left"
+                    className="w-full p-4 sm:p-5 farm-card-interactive flex items-center gap-3 sm:gap-4 text-left active:scale-[0.98] min-h-[72px]"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <role.icon className="w-6 h-6 text-primary" />
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <role.icon className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
                     </div>
-                    <div>
-                      <p className="font-semibold text-foreground">{role.label}</p>
-                      <p className="text-sm text-muted-foreground">{role.description}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground text-base sm:text-lg">{role.label}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{role.description}</p>
                     </div>
                   </button>
                 ))}
@@ -246,7 +246,7 @@ const AuthPage = () => {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your full name"
-                    className="w-full px-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
                   />
                 </div>
                 
@@ -257,7 +257,7 @@ const AuthPage = () => {
                   <select
                     value={region}
                     onChange={(e) => setRegion(e.target.value)}
-                    className="w-full px-4 py-4 bg-card border border-border rounded-2xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+                    className="w-full px-4 py-4 bg-card border border-border rounded-2xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary appearance-none min-h-[52px] text-base"
                   >
                     <option value="">Select your region</option>
                     {regions.map((r) => (
@@ -269,7 +269,7 @@ const AuthPage = () => {
                 <button
                   type="submit"
                   disabled={!name || !region}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] min-h-[52px]"
                 >
                   <Check className="w-5 h-5" />
                   Complete Setup

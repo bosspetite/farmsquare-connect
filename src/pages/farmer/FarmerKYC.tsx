@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Camera, CreditCard, CheckCircle, AlertCircle, Info, User, FileText, ArrowLeft, ArrowRight } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { Stepper } from '@/components/ui/Stepper';
@@ -18,6 +19,7 @@ const steps = [
 ];
 
 const FarmerKYC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [kycData, setKycData] = useState<KYCData | null>(null);
   const [step, setStep] = useState(0);
@@ -89,10 +91,6 @@ const FarmerKYC = () => {
     }
     if (!formData.phoneNumber.trim()) {
       toast({ title: 'Phone number is required', variant: 'destructive' });
-      return false;
-    }
-    if (!formData.dateOfBirth) {
-      toast({ title: 'Date of birth is required', variant: 'destructive' });
       return false;
     }
     if (!formData.address.trim()) {
@@ -174,6 +172,11 @@ const FarmerKYC = () => {
         title: 'KYC submitted for review', 
         description: 'Your documents are being verified. This usually takes 24-48 hours.' 
       });
+      
+      // Redirect to dashboard after submission
+      setTimeout(() => {
+        navigate('/farmer/dashboard');
+      }, 1500);
     } catch (error) {
       console.error('Error submitting KYC:', error);
       toast({ 
@@ -209,7 +212,7 @@ const FarmerKYC = () => {
     <FarmerLayout>
       <div className="space-y-6 animate-fade-up max-w-2xl mx-auto">
         <div>
-          <h1 className="text-2xl font-display font-bold text-foreground mb-2">Identity Verification</h1>
+          <h1 className="text-2xl font-display font-bold text-foreground mb-2">Farmer Verification (KYC)</h1>
           <p className="text-muted-foreground">Complete verification to enable withdrawals and access all features</p>
         </div>
 
@@ -227,6 +230,11 @@ const FarmerKYC = () => {
               <AlertCircle className="w-10 h-10 text-destructive" />
             </div>
             <h2 className="text-2xl font-display font-bold text-foreground mb-2">Verification Failed</h2>
+            {kycData.rejectionReason && (
+              <p className="text-muted-foreground mb-3">
+                <strong>Reason:</strong> {kycData.rejectionReason}
+              </p>
+            )}
             <p className="text-muted-foreground mb-6">Your documents were not approved. Please review the requirements and resubmit.</p>
             <button
               onClick={handleResubmit}
@@ -306,19 +314,6 @@ const FarmerKYC = () => {
                     </div>
 
                     <div>
-                      <Label htmlFor="dateOfBirth">Date of Birth *</Label>
-                      <Input
-                        id="dateOfBirth"
-                        type="date"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => updateFormField('dateOfBirth', e.target.value)}
-                        className="mt-1"
-                        max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">You must be at least 18 years old</p>
-                    </div>
-
-                    <div>
                       <Label htmlFor="address">Address *</Label>
                       <Input
                         id="address"
@@ -331,13 +326,15 @@ const FarmerKYC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleNext}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2"
-                >
-                  Continue to Identity Verification
-                  <ArrowRight className="w-5 h-5" />
-                </button>
+                <div className="pt-2">
+                  <button
+                    onClick={handleNext}
+                    className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
+                  >
+                    Continue to Identity Verification
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -421,17 +418,17 @@ const FarmerKYC = () => {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-2">
                   <button
                     onClick={handleBack}
-                    className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-medium flex items-center justify-center gap-2"
+                    className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                   >
                     <ArrowLeft className="w-5 h-5" />
                     Back
                   </button>
                   <button
                     onClick={handleNext}
-                    className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2"
+                    className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                   >
                     Review & Submit
                     <ArrowRight className="w-5 h-5" />
@@ -460,7 +457,6 @@ const FarmerKYC = () => {
                       <div className="space-y-1 text-sm">
                         <p><span className="text-muted-foreground">Name:</span> <span className="font-medium text-foreground">{formData.fullName}</span></p>
                         <p><span className="text-muted-foreground">Phone:</span> <span className="font-medium text-foreground">{formData.phoneNumber}</span></p>
-                        <p><span className="text-muted-foreground">Date of Birth:</span> <span className="font-medium text-foreground">{formData.dateOfBirth || 'Not provided'}</span></p>
                         <p><span className="text-muted-foreground">Address:</span> <span className="font-medium text-foreground">{formData.address}</span></p>
                       </div>
                     </div>
@@ -484,17 +480,17 @@ const FarmerKYC = () => {
                   </p>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-2">
                   <button
                     onClick={handleBack}
-                    className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-medium flex items-center justify-center gap-2"
+                    className="flex-1 py-4 bg-card border border-border text-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                   >
                     <ArrowLeft className="w-5 h-5" />
                     Back
                   </button>
                   <button
                     onClick={handleSubmit}
-                    className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2"
+                    className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                   >
                     <CheckCircle className="w-5 h-5" />
                     Submit for Review

@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Wallet, CreditCard, TrendingUp, ArrowDownCircle, Plus, History, Lock } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getTransactionsByUserId, formatNaira, formatDate, getAppState } from '@/lib/store';
+import { getWalletByUserId, getTransactionsByUserId, formatNaira, formatDate, getAppState, fundBuyerWallet } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 import { Modal } from '@/components/ui/Modal';
+import { usePaystack } from '@/hooks/usePaystack';
 
 const BuyerWallet = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { initializePayment, isLoaded, isProcessing, isConfigured } = usePaystack();
   const state = getAppState();
   const buyerWallet = user ? getWalletByUserId(user.id) : null;
   const transactions = user ? getTransactionsByUserId(user.id) : [];
@@ -17,6 +19,7 @@ const BuyerWallet = () => {
   const [showFundModal, setShowFundModal] = useState(false);
   const [fundAmount, setFundAmount] = useState('');
   const [activeTab, setActiveTab] = useState<'transactions' | 'history'>('transactions');
+  const [email, setEmail] = useState(user?.email || '');
 
   const handleFundWallet = () => {
     if (!fundAmount || parseFloat(fundAmount) <= 0) {
@@ -28,33 +31,76 @@ const BuyerWallet = () => {
       return;
     }
 
-    // Mock fund wallet (in real app, this would call an API)
-    if (buyerWallet) {
-      buyerWallet.available += parseFloat(fundAmount);
-      state.wallets = state.wallets.map(w => 
-        w.userId === user?.id ? buyerWallet : w
-      );
-      
-      // Add transaction record
-      state.transactions.push({
-        id: `txn_${Date.now()}`,
-        userId: user!.id,
-        type: 'Credit',
-        description: 'Wallet funding',
-        amount: parseFloat(fundAmount),
-        timestamp: new Date().toISOString(),
-      });
-      
-      localStorage.setItem('farmSquareState', JSON.stringify(state));
-      
+    if (!user) {
       toast({ 
-        title: 'Wallet funded', 
-        description: `${formatNaira(parseFloat(fundAmount))} added to your wallet` 
+        title: 'Authentication required', 
+        description: 'Please log in to fund your wallet',
+        variant: 'destructive'
       });
-      setShowFundModal(false);
-      setFundAmount('');
-      window.location.reload();
+      return;
     }
+
+    if (!isConfigured) {
+      toast({ 
+        title: 'Payment Configuration Error', 
+        description: 'Paystack is not configured. Please contact support.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!isLoaded) {
+      toast({ 
+        title: 'Payment system loading', 
+        description: 'Please wait a moment and try again',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!email || !email.includes('@')) {
+      toast({ 
+        title: 'Invalid email', 
+        description: 'Please enter a valid email address',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const amount = parseFloat(fundAmount);
+
+    initializePayment({
+      email: email,
+      amount: amount,
+      metadata: {
+        custom_fields: [
+          {
+            display_name: 'Transaction Type',
+            variable_name: 'transaction_type',
+            value: 'Wallet Funding',
+          },
+        ],
+      },
+      onClose: () => {
+        // User closed payment window
+      },
+      onSuccess: (reference) => {
+        // Fund wallet using the store helper
+        fundBuyerWallet(user.id, amount, reference);
+        
+        toast({ 
+          title: 'Wallet funded successfully!', 
+          description: `${formatNaira(amount)} has been added to your wallet` 
+        });
+        setShowFundModal(false);
+        setFundAmount('');
+        // Reload to show updated balance
+        setTimeout(() => window.location.reload(), 1000);
+      },
+      onError: (message) => {
+        // Error toast is already shown by the hook
+      },
+    });
   };
 
   if (!buyerWallet) {
@@ -259,8 +305,29 @@ const BuyerWallet = () => {
         <Modal isOpen={showFundModal} onClose={() => setShowFundModal(false)} title="Fund Wallet">
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Add funds to your wallet to place orders
+              Add funds to your wallet using Paystack. Funds will be available immediately after payment.
             </p>
+            {!isConfigured && (
+              <div className="p-3 bg-farm-warning/10 border border-farm-warning/20 rounded-lg">
+                <p className="text-sm text-farm-warning">
+                  ⚠️ Paystack API key not configured. Wallet funding will not work.
+                </p>
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value.toLowerCase().trim())}
+                placeholder="your.email@example.com"
+                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                required
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                A payment receipt will be sent to this email
+              </p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">Amount (₦)</label>
               <input
@@ -269,21 +336,40 @@ const BuyerWallet = () => {
                 onChange={(e) => setFundAmount(e.target.value)}
                 placeholder="Enter amount"
                 min="1"
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
+                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
+              {buyerWallet && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Current balance: {formatNaira(buyerWallet.available)}
+                </p>
+              )}
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowFundModal(false)}
-                className="flex-1 py-3 bg-muted text-foreground rounded-xl font-medium"
+                onClick={() => {
+                  setShowFundModal(false);
+                  setFundAmount('');
+                }}
+                className="flex-1 py-3 bg-muted text-foreground rounded-xl font-medium hover:bg-muted/80 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleFundWallet}
-                className="flex-1 py-3 bg-primary text-primary-foreground rounded-xl font-medium"
+                disabled={!fundAmount || parseFloat(fundAmount) <= 0 || !email || !email.includes('@') || !isLoaded || !isConfigured || isProcessing}
+                className="flex-1 py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
-                Fund Wallet
+                {isProcessing ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    Fund Wallet
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -294,6 +380,11 @@ const BuyerWallet = () => {
 };
 
 export default BuyerWallet;
+
+
+
+
+
 
 
 

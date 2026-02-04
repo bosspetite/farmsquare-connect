@@ -15,11 +15,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const state = getAppState();
-    if (state.currentUser) {
-      setUser(state.currentUser);
-    }
+    // Restore user from localStorage on mount
+    const restoreUser = () => {
+      const state = getAppState();
+      if (state.currentUser) {
+        setUser(state.currentUser);
+      }
+    };
+    
+    // Restore immediately
+    restoreUser();
+    
+    // Also listen for storage events (for cross-tab sync)
+    const handleStorageChange = () => {
+      restoreUser();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('farmsquare:state-changed', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('farmsquare:state-changed', handleStorageChange);
+    };
   }, []);
+
+  // Listen for storage changes to restore user on page reload
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const state = getAppState();
+      if (state.currentUser && (!user || state.currentUser.id !== user.id)) {
+        setUser(state.currentUser);
+      }
+    };
+    
+    // Check on mount and when storage changes
+    handleStorageChange();
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('farmsquare:state-changed', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('farmsquare:state-changed', handleStorageChange);
+    };
+  }, [user]);
 
   const login = (role: UserRole, name?: string, region?: string) => {
     const state = getAppState();

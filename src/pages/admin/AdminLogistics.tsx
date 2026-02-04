@@ -1,15 +1,21 @@
-import React from 'react';
-import { Truck, MapPin, Clock, CheckCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Truck, MapPin, Clock, CheckCircle, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/layouts/AdminLayout';
 import { getAppState, formatDate } from '@/lib/store';
+import { MultiDeliveryMap } from '@/modules/delivery-tracking';
+import { Order } from '@/types';
 
 const AdminLogistics = () => {
+  const navigate = useNavigate();
   const state = getAppState();
   const orders = state.orders;
+  const [selectedOrderId, setSelectedOrderId] = useState<string | undefined>();
   
   const inTransitOrders = orders.filter(o => o.status === 'InTransit');
   const scheduledOrders = orders.filter(o => o.status === 'PickupScheduled');
   const deliveredOrders = orders.filter(o => o.status === 'Delivered');
+  const activeDeliveries = [...inTransitOrders, ...scheduledOrders];
 
   return (
     <AdminLayout>
@@ -38,10 +44,44 @@ const AdminLogistics = () => {
           </div>
           <div className="farm-card text-center">
             <MapPin className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-2xl font-semibold text-foreground">{orders.length}</p>
-            <p className="text-sm text-muted-foreground">Total Orders</p>
+            <p className="text-2xl font-semibold text-foreground">{activeDeliveries.length}</p>
+            <p className="text-sm text-muted-foreground">Active Deliveries</p>
           </div>
         </div>
+
+        {/* Logistics Overview Map */}
+        {activeDeliveries.length > 0 && (
+          <div className="farm-card p-0 overflow-hidden">
+            <div className="p-6 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1">Live Delivery Map</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Monitor all active deliveries across Nigeria
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/admin/orders')}
+                  className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  View All Orders
+                </button>
+              </div>
+            </div>
+            <div className="h-[600px]">
+              <MultiDeliveryMap
+                orders={activeDeliveries}
+                selectedOrderId={selectedOrderId}
+                onOrderSelect={(orderId) => {
+                  setSelectedOrderId(orderId);
+                  navigate(`/admin/orders`);
+                }}
+                showFilters={true}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Scheduled Pickups */}
         {scheduledOrders.length > 0 && (

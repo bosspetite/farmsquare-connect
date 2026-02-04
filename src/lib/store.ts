@@ -1,5 +1,8 @@
-import { AppState, Farmer, Buyer, Listing, Order, Transaction, Wallet, MarketPriceIntel, KYCData, Dispute, DisputeStatus } from '@/types';
+import { AppState, Farmer, Buyer, Listing, Order, OrderTracking, Transaction, Wallet, MarketPriceIntel, KYCData, Dispute, DisputeStatus, Escrow, PaymentStatus } from '@/types';
 import { getProduceImages } from '@/utils/produceImages';
+
+// Platform commission rate (10%)
+const PLATFORM_COMMISSION_RATE = 0.10;
 
 const STORAGE_KEY = 'farmsquare_state';
 
@@ -82,17 +85,22 @@ const createSeedData = (): AppState => {
         createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ],
+    escrows: [],
+    platformCommission: 0,
     wallets: [
       {
         userId: farmerId,
         available: 485000,
         pending: 125000,
+        locked: 0,
         currency: '₦',
+        withdrawn: 200000,
       },
       {
         userId: buyerId,
         available: 2500000,
         pending: 0,
+        locked: 0,
         currency: '₦',
       },
     ],
@@ -251,6 +259,414 @@ const createSeedData = (): AppState => {
         status: 'Active',
         createdAt: new Date(Date.now() - 11 * 24 * 60 * 60 * 1000).toISOString(),
       },
+      // Additional listings with different grades for all 6 produce types
+      {
+        id: 'listing_012',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Tomatoes',
+        grade: 'A',
+        quantityKg: 2000,
+        pricePerKg: 650,
+        photos: getProduceImages('Tomatoes'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_013',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Tomatoes',
+        grade: 'B',
+        quantityKg: 1800,
+        pricePerKg: 580,
+        photos: getProduceImages('Tomatoes'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_014',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Rice',
+        grade: 'C',
+        quantityKg: 3000,
+        pricePerKg: 750,
+        photos: getProduceImages('Rice'),
+        locationLabel: 'Zaria Farm Settlement',
+        region: 'Kaduna',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_015',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Yam',
+        grade: 'B',
+        quantityKg: 2200,
+        pricePerKg: 500,
+        photos: getProduceImages('Yam'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_016',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Cassava',
+        grade: 'C',
+        quantityKg: 2800,
+        pricePerKg: 250,
+        photos: getProduceImages('Cassava'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 16 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_017',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Maize',
+        grade: 'C',
+        quantityKg: 5500,
+        pricePerKg: 400,
+        photos: getProduceImages('Maize'),
+        locationLabel: 'Kano River Project',
+        region: 'Kano',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_018',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Sorghum',
+        grade: 'A',
+        quantityKg: 4500,
+        pricePerKg: 450,
+        photos: getProduceImages('Sorghum'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_019',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Tomatoes',
+        grade: 'C',
+        quantityKg: 1500,
+        pricePerKg: 520,
+        photos: getProduceImages('Tomatoes'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 19 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_020',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Yam',
+        grade: 'C',
+        quantityKg: 2000,
+        pricePerKg: 480,
+        photos: getProduceImages('Yam'),
+        locationLabel: 'Zaria Farm Settlement',
+        region: 'Kaduna',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      // More listings to ensure plenty of produce is visible
+      {
+        id: 'listing_021',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Maize',
+        grade: 'A',
+        quantityKg: 8000,
+        pricePerKg: 460,
+        photos: getProduceImages('Maize'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_022',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Rice',
+        grade: 'B',
+        quantityKg: 5000,
+        pricePerKg: 800,
+        photos: getProduceImages('Rice'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_023',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Cassava',
+        grade: 'A',
+        quantityKg: 6000,
+        pricePerKg: 320,
+        photos: getProduceImages('Cassava'),
+        locationLabel: 'Kano River Project',
+        region: 'Kano',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_024',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Yam',
+        grade: 'A',
+        quantityKg: 4000,
+        pricePerKg: 580,
+        photos: getProduceImages('Yam'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_025',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Sorghum',
+        grade: 'A',
+        quantityKg: 5500,
+        pricePerKg: 420,
+        photos: getProduceImages('Sorghum'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_026',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Tomatoes',
+        grade: 'B',
+        quantityKg: 2500,
+        pricePerKg: 600,
+        photos: getProduceImages('Tomatoes'),
+        locationLabel: 'Zaria Farm Settlement',
+        region: 'Kaduna',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_027',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Maize',
+        grade: 'B',
+        quantityKg: 7500,
+        pricePerKg: 410,
+        photos: getProduceImages('Maize'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_028',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Rice',
+        grade: 'A',
+        quantityKg: 6000,
+        pricePerKg: 950,
+        photos: getProduceImages('Rice'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_029',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Cassava',
+        grade: 'B',
+        quantityKg: 4500,
+        pricePerKg: 270,
+        photos: getProduceImages('Cassava'),
+        locationLabel: 'Kano River Project',
+        region: 'Kano',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_030',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Yam',
+        grade: 'B',
+        quantityKg: 3200,
+        pricePerKg: 510,
+        photos: getProduceImages('Yam'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_031',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Sorghum',
+        grade: 'C',
+        quantityKg: 3800,
+        pricePerKg: 360,
+        photos: getProduceImages('Sorghum'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 11 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_032',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Tomatoes',
+        grade: 'A',
+        quantityKg: 3000,
+        pricePerKg: 680,
+        photos: getProduceImages('Tomatoes'),
+        locationLabel: 'Zaria Farm Settlement',
+        region: 'Kaduna',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_033',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Maize',
+        grade: 'C',
+        quantityKg: 6500,
+        pricePerKg: 390,
+        photos: getProduceImages('Maize'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_034',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Rice',
+        grade: 'C',
+        quantityKg: 4200,
+        pricePerKg: 720,
+        photos: getProduceImages('Rice'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_035',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Cassava',
+        grade: 'A',
+        quantityKg: 7000,
+        pricePerKg: 310,
+        photos: getProduceImages('Cassava'),
+        locationLabel: 'Kano River Project',
+        region: 'Kano',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_036',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Yam',
+        grade: 'A',
+        quantityKg: 4800,
+        pricePerKg: 560,
+        photos: getProduceImages('Yam'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 16 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_037',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Sorghum',
+        grade: 'B',
+        quantityKg: 5000,
+        pricePerKg: 390,
+        photos: getProduceImages('Sorghum'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_038',
+        farmerId: farmerId,
+        farmerName: 'Adamu Bello',
+        commodity: 'Tomatoes',
+        grade: 'B',
+        quantityKg: 2200,
+        pricePerKg: 590,
+        photos: getProduceImages('Tomatoes'),
+        locationLabel: 'Zaria Farm Settlement',
+        region: 'Kaduna',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_039',
+        farmerId: farmerId2,
+        farmerName: 'Hassan Musa',
+        commodity: 'Maize',
+        grade: 'A',
+        quantityKg: 9000,
+        pricePerKg: 470,
+        photos: getProduceImages('Maize'),
+        locationLabel: 'Benue Valley Farm',
+        region: 'Benue',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 19 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'listing_040',
+        farmerId: farmerId3,
+        farmerName: 'Amina Usman',
+        commodity: 'Rice',
+        grade: 'B',
+        quantityKg: 5500,
+        pricePerKg: 830,
+        photos: getProduceImages('Rice'),
+        locationLabel: 'Sokoto Grain Farm',
+        region: 'Sokoto',
+        status: 'Active',
+        createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
+      },
     ],
     orders: [
       {
@@ -372,6 +788,8 @@ const createSeedData = (): AppState => {
     disputes: [
       // No disputes initially
     ],
+    escrows: [],
+    platformCommission: 0,
   };
 };
 
@@ -384,8 +802,25 @@ export const getAppState = (): AppState => {
       // Ensure all required properties exist (migration for old data)
       if (!state.disputes) {
         state.disputes = [];
-        setAppState(state);
       }
+      
+      // Merge seed listings with existing listings to ensure all produce is available
+      const seedData = createSeedData();
+      const existingListingIds = new Set(state.listings.map((l: Listing) => l.id));
+      
+      // Add any seed listings that don't exist in current state
+      seedData.listings.forEach((seedListing) => {
+        if (!existingListingIds.has(seedListing.id)) {
+          state.listings.push(seedListing);
+        }
+      });
+      
+      // Ensure listings are sorted by creation date (newest first)
+      state.listings.sort((a: Listing, b: Listing) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setAppState(state);
       return state;
     }
   } catch (e) {
@@ -410,6 +845,28 @@ export const resetAppState = (): AppState => {
   const seedData = createSeedData();
   setAppState(seedData);
   return seedData;
+};
+
+// Force refresh listings - ensures all seed listings are available
+export const refreshListings = (): AppState => {
+  const state = getAppState();
+  const seedData = createSeedData();
+  const existingListingIds = new Set(state.listings.map((l: Listing) => l.id));
+  
+  // Add any seed listings that don't exist
+  seedData.listings.forEach((seedListing) => {
+    if (!existingListingIds.has(seedListing.id)) {
+      state.listings.push(seedListing);
+    }
+  });
+  
+  // Sort by creation date
+  state.listings.sort((a: Listing, b: Listing) => 
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  
+  setAppState(state);
+  return state;
 };
 
 // Update partial state
@@ -497,13 +954,69 @@ export const deleteListing = (listingId: string): void => {
   setAppState(state);
 };
 
-// Helper: Add new order
-export const addOrder = (order: Omit<Order, 'id' | 'createdAt'>): Order => {
+// Helper: Get Nigerian city coordinates (lazy import to avoid circular dependency)
+const getCityCoords = (cityName: string): { lat: number; lng: number } => {
+  const cities: Record<string, { lat: number; lng: number }> = {
+    Lagos: { lat: 6.5244, lng: 3.3792 },
+    Abuja: { lat: 9.0765, lng: 7.3986 },
+    Kano: { lat: 12.0022, lng: 8.5919 },
+    Kaduna: { lat: 10.5264, lng: 7.4383 },
+    PortHarcourt: { lat: 4.8156, lng: 7.0498 },
+    Ibadan: { lat: 7.3776, lng: 3.9470 },
+    Benin: { lat: 6.3350, lng: 5.6037 },
+    Enugu: { lat: 6.4474, lng: 7.5139 },
+    Zaria: { lat: 11.1112, lng: 7.7227 },
+    Sokoto: { lat: 13.0627, lng: 5.2433 },
+    Benue: { lat: 7.3369, lng: 8.7404 },
+    Ekiti: { lat: 7.6233, lng: 5.2209 },
+    Kogi: { lat: 7.8023, lng: 6.7439 },
+    Kwara: { lat: 8.5000, lng: 4.5500 },
+    Osun: { lat: 7.7500, lng: 4.5667 },
+  };
+  
+  const normalized = cityName.toLowerCase();
+  for (const [key, value] of Object.entries(cities)) {
+    if (key.toLowerCase() === normalized) {
+      return value;
+    }
+  }
+  return cities.Lagos; // Default
+};
+
+// Helper: Add new order with location and tracking data
+export const addOrder = (order: Omit<Order, 'id' | 'createdAt' | 'buyerLocation' | 'farmerLocation' | 'deliveryLocation' | 'tracking'>): Order => {
   const state = getAppState();
+  
+  const listing = state.listings.find(l => l.id === order.listingId);
+  const buyer = state.buyers.find(b => b.id === order.buyerId);
+  const farmer = state.farmers.find(f => f.id === order.farmerId);
+  
+  // Set locations based on regions
+  const farmerLocation = getCityCoords(listing?.region || order.pickupLocation || farmer?.region || 'Lagos');
+  const buyerLocation = getCityCoords(buyer?.region || 'Lagos');
+  const deliveryLocation = buyerLocation; // Delivery goes to buyer's location
+  
+  // Initialize tracking data with new structure
+  const tracking: OrderTracking = {
+    pickup: farmerLocation,
+    dropoff: deliveryLocation,
+    current: farmerLocation, // Start at pickup
+    isTracking: false,
+    progressPct: 0,
+    // Legacy fields for backward compatibility
+    currentLocation: null,
+    route: [],
+    progressPercentage: 0,
+  };
+  
   const newOrder: Order = {
     ...order,
     id: `order_${generateId()}`,
     createdAt: new Date().toISOString(),
+    buyerLocation,
+    farmerLocation,
+    deliveryLocation,
+    tracking,
   };
   
   // Add order
@@ -520,6 +1033,15 @@ export const addOrder = (order: Omit<Order, 'id' | 'createdAt'>): Order => {
   }
   
   setAppState(state);
+  
+  // Dispatch custom event to notify all components of new order
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('farmsquare:order-created', { 
+      detail: { order: newOrder, farmerId: order.farmerId, buyerId: order.buyerId } 
+    }));
+    window.dispatchEvent(new CustomEvent('farmsquare:state-changed'));
+  }
+  
   return newOrder;
 };
 
@@ -532,14 +1054,51 @@ export const updateOrderStatus = (orderId: string, status: import('@/types').Ord
     const order = state.orders[index];
     const previousStatus = order.status;
     
+    // Initialize tracking when order goes in transit
+    let tracking = order.tracking;
+    if (status === 'InTransit' && order.farmerLocation && order.deliveryLocation) {
+      // Initialize tracking with starting location
+      tracking = {
+        currentLocation: order.farmerLocation,
+        route: [], // Will be populated by tracking service
+        progressPercentage: 0,
+      };
+      
+      // Trigger tracking service to start (if available)
+      if (typeof window !== 'undefined') {
+        // Dispatch event for tracking service
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('farmsquare:order-in-transit', {
+            detail: { orderId: order.id }
+          }));
+        }, 100);
+      }
+    } else if (status === 'Delivered' && tracking) {
+      // Mark as complete when delivered
+      tracking = {
+        ...tracking,
+        currentLocation: order.deliveryLocation || tracking.currentLocation,
+        progressPercentage: 100,
+      };
+      
+      // Stop tracking when delivered
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('farmsquare:order-delivered', {
+          detail: { orderId: order.id }
+        }));
+      }
+    }
+    
     state.orders[index] = {
       ...order,
       status,
       ...(status === 'Accepted' && { acceptedAt: now }),
+      ...(status === 'Processing' && { processingAt: now }),
       ...(status === 'PickupScheduled' && { pickupScheduledAt: now }),
       ...(status === 'InTransit' && { inTransitAt: now }),
       ...(status === 'Delivered' && { deliveredAt: now }),
       ...(evidence && { evidence }),
+      ...(tracking && { tracking }),
     };
     
     // Handle wallet updates and quantity locking based on status changes
@@ -602,7 +1161,16 @@ export const updateOrderStatus = (orderId: string, status: import('@/types').Ord
 };
 
 // Helper: Add transaction
-export const addTransaction = (userId: string, type: import('@/types').TransactionType, title: string, amount: number): void => {
+export const addTransaction = (
+  userId: string, 
+  type: import('@/types').TransactionType, 
+  title: string, 
+  amount: number,
+  status: import('@/types').TransactionStatus = 'completed',
+  reference?: string,
+  orderId?: string,
+  metadata?: Record<string, any>
+): void => {
   const state = getAppState();
   const newTransaction: Transaction = {
     id: `txn_${generateId()}`,
@@ -611,6 +1179,10 @@ export const addTransaction = (userId: string, type: import('@/types').Transacti
     title,
     amount,
     createdAt: new Date().toISOString(),
+    status,
+    reference,
+    orderId,
+    metadata,
   };
   state.transactions.unshift(newTransaction);
   setAppState(state);
@@ -675,7 +1247,7 @@ export const confirmDelivery = (orderId: string): void => {
 };
 
 // Helper: Update KYC status (legacy function for backward compatibility)
-export const updateKYCStatus = (userId: string, status: import('@/types').KYCStatus, selfiePhoto?: string, idPhoto?: string): void => {
+export const updateKYCStatus = (userId: string, status: import('@/types').KYCStatus, rejectionReason?: string): void => {
   const state = getAppState();
   const index = state.kycData.findIndex(k => k.userId === userId);
   
@@ -684,8 +1256,9 @@ export const updateKYCStatus = (userId: string, status: import('@/types').KYCSta
   const kycRecord: KYCData = {
     userId,
     status,
-    selfieFile: selfiePhoto || existingData?.selfieFile,
-    idDocumentFile: idPhoto || existingData?.idDocumentFile,
+    rejectionReason: status === 'REJECTED' ? rejectionReason : undefined,
+    selfieFile: existingData?.selfieFile,
+    idDocumentFile: existingData?.idDocumentFile,
     submittedAt: status === 'IN_REVIEW' || status === 'APPROVED' ? new Date().toISOString() : existingData?.submittedAt,
     // Preserve existing data
     fullName: existingData?.fullName,
@@ -698,7 +1271,13 @@ export const updateKYCStatus = (userId: string, status: import('@/types').KYCSta
     businessName: existingData?.businessName,
     businessType: existingData?.businessType,
     businessRegistrationNumber: existingData?.businessRegistrationNumber,
+    businessAddress: existingData?.businessAddress,
+    businessEmail: existingData?.businessEmail,
+    businessPhone: existingData?.businessPhone,
     businessDocumentFile: existingData?.businessDocumentFile,
+    authorizedRepresentativeName: existingData?.authorizedRepresentativeName,
+    authorizedRepresentativeRole: existingData?.authorizedRepresentativeRole,
+    authorizedRepresentativeIdFile: existingData?.authorizedRepresentativeIdFile,
   };
   
   if (index !== -1) {
@@ -855,3 +1434,28 @@ export const updateDisputeStatus = (disputeId: string, status: DisputeStatus, re
     setAppState(state);
   }
 };
+
+// Fund buyer wallet via Paystack
+export const fundBuyerWallet = (userId: string, amount: number, reference: string): void => {
+  const state = getAppState();
+  let buyerWallet = state.wallets.find(w => w.userId === userId);
+  
+  if (!buyerWallet) {
+    buyerWallet = {
+      userId,
+      available: 0,
+      pending: 0,
+      locked: 0,
+      currency: '₦',
+    };
+    state.wallets.push(buyerWallet);
+  }
+  
+  buyerWallet.available += amount;
+  
+  // Add transaction
+  addTransaction(userId, 'fund', `Wallet funding via Paystack`, amount, 'completed', reference);
+  
+  setAppState(state);
+};
+

@@ -14,39 +14,44 @@ const AdminDashboard = () => {
   const pendingKYC = (state.kycData || []).filter(k => k.status === 'IN_REVIEW');
   const allDisputes = getAllDisputes();
   const openDisputes = (allDisputes || []).filter(d => d.status === 'Open' || d.status === 'UnderReview');
+  
+  // Defensive checks for arrays
+  const farmers = state.farmers || [];
+  const buyers = state.buyers || [];
+  const listings = state.listings || [];
 
   return (
     <AdminLayout>
       <div className="space-y-6 animate-fade-up">
         <h1 className="text-xl font-display font-bold text-foreground">Admin Overview</h1>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={TrendingUp} label="Total Trades" value={totalTrades} />
           <StatCard icon={CreditCard} label="Trade Volume" value={formatNaira(totalVolume)} />
-          <StatCard icon={Users} label="Total Users" value={state.farmers.length + state.buyers.length} />
-          <StatCard icon={Package} label="Active Listings" value={state.listings.filter(l => l.status === 'Active').length} />
+          <StatCard icon={Users} label="Total Users" value={farmers.length + buyers.length} />
+          <StatCard icon={Package} label="Active Listings" value={listings.filter(l => l.status === 'Active').length} />
         </div>
 
         {/* Pending KYC Reviews Alert */}
         {pendingKYC.length > 0 && (
           <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-farm-warning/20 flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-farm-warning" />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-farm-warning/20 flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-farm-warning" />
                 </div>
-                <div>
-                  <p className="font-semibold text-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground text-sm sm:text-base">
                     {pendingKYC.length} KYC Verification{pendingKYC.length > 1 ? 's' : ''} Pending Review
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {pendingKYC.length} user{pendingKYC.length > 1 ? 's' : ''} submitted documents awaiting your review
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => navigate('/admin/users')}
-                className="px-5 py-2.5 bg-farm-warning text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                className="w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 bg-farm-warning text-white rounded-lg text-xs sm:text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <Shield className="w-4 h-4" />
                 Review Now
@@ -58,26 +63,27 @@ const AdminDashboard = () => {
         {/* Open Disputes Alert */}
         {openDisputes.length > 0 && (
           <div className="farm-card bg-destructive/10 border-destructive/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-destructive/20 flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-destructive" />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-destructive/20 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-destructive" />
                 </div>
-                <div>
-                  <p className="font-semibold text-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground text-sm sm:text-base">
                     {openDisputes.length} Open Dispute{openDisputes.length > 1 ? 's' : ''} Requiring Attention
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {openDisputes.length} dispute{openDisputes.length > 1 ? 's' : ''} need{openDisputes.length === 1 ? 's' : ''} your review and resolution
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => navigate('/admin/disputes')}
-                className="px-5 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                className="w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 bg-destructive text-destructive-foreground rounded-lg text-xs sm:text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <AlertTriangle className="w-4 h-4" />
-                Review Disputes
+                <span className="hidden sm:inline">Review Disputes</span>
+                <span className="sm:hidden">Review</span>
               </button>
             </div>
           </div>
@@ -130,7 +136,7 @@ const AdminDashboard = () => {
                   </span>
                 </div>
               ))}
-              {state.listings.length === 0 && (
+              {(state.listings || []).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No listings yet</p>
               )}
             </div>
@@ -148,7 +154,7 @@ const AdminDashboard = () => {
               </button>
             </div>
             <div className="space-y-3">
-              {state.orders.slice(0, 5).map((order) => (
+              {(state.orders || []).slice(0, 5).map((order) => (
                 <div 
                   key={order.id} 
                   className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
@@ -173,7 +179,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               ))}
-              {state.orders.length === 0 && (
+              {(state.orders || []).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No orders yet</p>
               )}
             </div>
@@ -190,7 +196,7 @@ const AdminDashboard = () => {
             <div className="p-4 bg-muted/30 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Active Farmers</p>
               <p className="text-2xl font-bold text-foreground">
-                {state.farmers.filter(f => f.kycStatus === 'APPROVED').length}
+                {(state.farmers || []).filter(f => f.kycStatus === 'APPROVED').length}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 of {state.farmers.length} total farmers
@@ -198,16 +204,16 @@ const AdminDashboard = () => {
             </div>
             <div className="p-4 bg-muted/30 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Total Listings Created</p>
-              <p className="text-2xl font-bold text-foreground">{state.listings.length}</p>
+              <p className="text-2xl font-bold text-foreground">{(state.listings || []).length}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {state.listings.filter(l => l.status === 'Active').length} currently active
+                {(state.listings || []).filter(l => l.status === 'Active').length} currently active
               </p>
             </div>
             <div className="p-4 bg-muted/30 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Orders from Farmers</p>
-              <p className="text-2xl font-bold text-foreground">{state.orders.length}</p>
+              <p className="text-2xl font-bold text-foreground">{(state.orders || []).length}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {state.orders.filter(o => o.status === 'Delivered').length} completed
+                {(state.orders || []).filter(o => o.status === 'Delivered').length} completed
               </p>
             </div>
           </div>
@@ -216,7 +222,7 @@ const AdminDashboard = () => {
         {/* Quick Actions */}
         <div className="farm-card">
           <h3 className="font-display font-semibold text-foreground mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {[
               { icon: Users, label: 'Manage Users', path: '/admin/users' },
               { icon: Package, label: 'Review Listings', path: '/admin/listings' },

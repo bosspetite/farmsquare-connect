@@ -10,7 +10,10 @@ const AgentFarmers = () => {
   const state = getAppState();
   const [searchQuery, setSearchQuery] = React.useState('');
   
-  const farmers = state.farmers.filter(f => 
+  // Defensive check for farmers array
+  const allFarmers = state.farmers || [];
+  
+  const farmers = allFarmers.filter(f => 
     f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.region.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.phone.includes(searchQuery)

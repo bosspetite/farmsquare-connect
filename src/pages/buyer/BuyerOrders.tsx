@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Package, MapPin } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
-import { getOrdersByBuyerId, formatNaira, formatTimeAgo, getAppState } from '@/lib/store';
+import { formatNaira, formatTimeAgo, getAppState } from '@/lib/store';
+import { useOrderStore } from '@/stores/orderStore';
 import { OrderStatus } from '@/types';
 import { getProduceImage } from '@/utils/produceImages';
 
@@ -14,10 +15,66 @@ const statusFilters: (OrderStatus | 'All')[] = ['All', 'Pending', 'Accepted', 'P
 const BuyerOrders = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const state = getAppState();
+  // Use Zustand store for orders - single source of truth
+  const { getBuyerOrders, refreshOrders, subscribe } = useOrderStore();
   const [activeFilter, setActiveFilter] = useState<OrderStatus | 'All'>('All');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [state, setState] = useState(getAppState());
 
-  const allOrders = user ? getOrdersByBuyerId(user.id) : [];
+  // Get orders from Zustand store - always refresh first
+  const allOrders = useMemo(() => {
+    if (!user) return [];
+    // Refresh store before getting orders to ensure we have latest data
+    refreshOrders();
+    return getBuyerOrders(user.id);
+  }, [user, refreshKey, getBuyerOrders, refreshOrders]);
+
+  // Subscribe to order changes for real-time updates
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      setRefreshKey(prev => prev + 1);
+    });
+
+    // Refresh on mount
+    refreshOrders();
+
+    // Refresh when window gains focus
+    const handleFocus = () => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Refresh when localStorage changes (cross-tab updates)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'farmsquare_state') {
+        refreshOrders();
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Refresh every 10 seconds for real-time updates
+    const interval = setInterval(() => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    }, 10000);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [subscribe, refreshOrders]);
+
+  // Update state when user changes
+  useEffect(() => {
+    if (user) {
+      setState(getAppState());
+    }
+  }, [user, refreshKey]);
+
   const orders = activeFilter === 'All' ? allOrders : allOrders.filter(o => o.status === activeFilter);
   
   const stats = {
@@ -39,19 +96,19 @@ const BuyerOrders = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="farm-card text-center">
             <p className="text-2xl font-semibold text-foreground">{stats.all}</p>
-            <p className="text-sm text-muted-foreground">Total Orders</p>
+            <p className="text-sm sm:text-base text-muted-foreground">Total Orders</p>
           </div>
           <div className="farm-card text-center">
             <p className="text-2xl font-semibold text-farm-warning">{stats.pending}</p>
-            <p className="text-sm text-muted-foreground">Pending</p>
+            <p className="text-sm sm:text-base text-muted-foreground">Pending</p>
           </div>
           <div className="farm-card text-center">
             <p className="text-2xl font-semibold text-farm-info">{stats.active}</p>
-            <p className="text-sm text-muted-foreground">Active</p>
+            <p className="text-sm sm:text-base text-muted-foreground">Active</p>
           </div>
           <div className="farm-card text-center">
             <p className="text-2xl font-semibold text-farm-success">{stats.delivered}</p>
-            <p className="text-sm text-muted-foreground">Delivered</p>
+            <p className="text-sm sm:text-base text-muted-foreground">Delivered</p>
           </div>
         </div>
 
@@ -61,7 +118,7 @@ const BuyerOrders = () => {
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-full text-sm sm:text-base font-medium whitespace-nowrap transition-all ${
                 activeFilter === filter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground hover:border-primary/50'
               }`}
             >
@@ -81,7 +138,7 @@ const BuyerOrders = () => {
         ) : (
           <div className="space-y-3">
             {orders.map((order) => {
-              const listing = state.listings.find(l => l.id === order.listingId);
+              const listing = (state.listings || []).find(l => l.id === order.listingId);
               return (
                 <div
                   key={order.id}
@@ -100,13 +157,13 @@ const BuyerOrders = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-foreground">{order.commodity}</h3>
-                      <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
+                      <h3 className="font-semibold text-base sm:text-lg text-foreground">{order.commodity}</h3>
+                      <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs sm:text-sm font-medium">
                         {order.quantityKg}kg
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">{order.farmerName}</p>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <p className="text-sm sm:text-base text-muted-foreground mb-1">{order.farmerName}</p>
+                    <div className="flex items-center gap-3 text-xs sm:text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
                         {order.pickupLocation}

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, User, Truck, Shield, Package, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { ArrowLeft, MapPin, User, Truck, Shield, Package, CheckCircle, AlertCircle, Camera, Navigation } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Timeline } from '@/components/ui/Timeline';
@@ -10,20 +10,71 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getAppState, formatNaira, formatDate, confirmDelivery, createDispute, getDisputesByOrderId } from '@/lib/store';
+import { useOrderStore } from '@/stores/orderStore';
 import { toast } from '@/hooks/use-toast';
 import { getProduceImage } from '@/utils/produceImages';
 import { useAuth } from '@/contexts/AuthContext';
 import { DisputeType } from '@/types';
+import { DeliveryTrackingModal, DeliveryMap, useDeliveryTracking } from '@/modules/delivery-tracking';
+import { getNigerianCityCoords } from '@/modules/delivery-tracking';
+import { OrderTrackingMap } from '@/components/tracking/OrderTrackingMap';
 
 const BuyerOrderDetail = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const state = getAppState();
-  const order = state.orders.find(o => o.id === orderId);
-  const listing = order ? state.listings.find(l => l.id === order.listingId) : null;
+  const { getOrderById, refreshOrders, subscribe } = useOrderStore();
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Get order from Zustand store - always refresh first
+  const order = useMemo(() => {
+    if (!orderId) return undefined;
+    // Refresh store before getting order to ensure we have latest data
+    refreshOrders();
+    return getOrderById(orderId);
+  }, [orderId, refreshKey, getOrderById, refreshOrders]);
+  
+  // Subscribe to order changes for real-time updates
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    refreshOrders(); // Initial load
+    
+    const handleFocus = () => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('focus', handleFocus);
+    
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'farmsquare_state') {
+        refreshOrders();
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    const interval = setInterval(() => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    }, 2000);
+    
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [subscribe, refreshOrders]);
+  
+  // Re-read other state when refreshKey changes
+  const state = useMemo(() => getAppState(), [refreshKey]);
+  const listing = useMemo(() => order ? (state.listings || []).find(l => l.id === order.listingId) : null, [state, order]);
   
   const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [disputeType, setDisputeType] = useState<DisputeType>('other');
   const [disputeTitle, setDisputeTitle] = useState('');
   const [disputeDescription, setDisputeDescription] = useState('');
@@ -32,6 +83,15 @@ const BuyerOrderDetail = () => {
   // Get existing disputes for this order
   const existingDisputes = order ? getDisputesByOrderId(order.id) : [];
   const hasOpenDispute = existingDisputes.some(d => d.status === 'Open' || d.status === 'UnderReview');
+
+  // Delivery tracking hook
+  const { trackingData } = useDeliveryTracking(orderId);
+  
+  // Get route coordinates from order locations or calculate from regions
+  const routeCoords = order ? {
+    origin: order.farmerLocation || getNigerianCityCoords(listing?.region || order.pickupLocation || 'Lagos'),
+    destination: order.deliveryLocation || order.buyerLocation || getNigerianCityCoords('Lagos'),
+  } : null;
 
   if (!order) {
     return (
@@ -53,7 +113,7 @@ const BuyerOrderDetail = () => {
     return [
       { label: 'Order Placed', timestamp: formatDate(order.createdAt), completed: true },
       { label: 'Farmer Accepted', timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined, completed: !!order.acceptedAt, current: order.status === 'Pending' },
-      { label: 'Processing', timestamp: order.status === 'Processing' ? formatDate(new Date().toISOString()) : undefined, completed: order.status !== 'Pending' && order.status !== 'Accepted', current: order.status === 'Processing' },
+      { label: 'Processing', timestamp: order.processingAt ? formatDate(order.processingAt) : undefined, completed: !!order.processingAt || ['PickupScheduled', 'InTransit', 'Delivered'].includes(order.status), current: order.status === 'Processing' },
       { label: 'Pickup Scheduled', timestamp: order.pickupScheduledAt ? formatDate(order.pickupScheduledAt) : undefined, completed: !!order.pickupScheduledAt, current: order.status === 'PickupScheduled' },
       { label: 'In Transit', timestamp: order.inTransitAt ? formatDate(order.inTransitAt) : undefined, completed: !!order.inTransitAt, current: order.status === 'InTransit' },
       { label: 'Delivered', timestamp: order.deliveredAt ? formatDate(order.deliveredAt) : undefined, completed: !!order.deliveredAt, current: order.status === 'Delivered' },
@@ -142,12 +202,41 @@ const BuyerOrderDetail = () => {
 
         {/* Timeline */}
         <div className="farm-card">
-          <div className="flex items-center gap-2 mb-4">
-            <Truck className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Order Timeline</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold text-foreground">Order Timeline</h3>
+            </div>
+            {['Accepted', 'Processing', 'PickupScheduled', 'InTransit'].includes(order.status) && (
+              <button
+                onClick={() => setShowTrackingModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity active:scale-[0.98]"
+              >
+                <Navigation className="w-4 h-4" />
+                Track Order
+              </button>
+            )}
           </div>
           <Timeline events={getTimelineEvents()} />
         </div>
+
+        {/* Order Tracking Map - Leaflet-based */}
+        {order.tracking && order.tracking.pickup && order.tracking.dropoff && (
+          <div className="farm-card">
+            <div className="flex items-center gap-2 mb-4">
+              <Navigation className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold text-foreground">Order Tracking</h3>
+            </div>
+            <OrderTrackingMap
+              pickup={order.tracking.pickup}
+              dropoff={order.tracking.dropoff}
+              current={order.tracking.current || order.tracking.pickup}
+              isTracking={order.tracking.isTracking || false}
+              progressPct={order.tracking.progressPct}
+              lastUpdatedAt={order.tracking.lastUpdatedAt}
+            />
+          </div>
+        )}
 
         {/* Delivery Evidence */}
         {order.evidence && order.evidence.photos && order.evidence.photos.length > 0 && (
@@ -391,6 +480,15 @@ const BuyerOrderDetail = () => {
             </div>
           </div>
         </Modal>
+
+        {/* Delivery Tracking Modal */}
+        {orderId && (
+          <DeliveryTrackingModal
+            orderId={orderId}
+            isOpen={showTrackingModal}
+            onClose={() => setShowTrackingModal(false)}
+          />
+        )}
       </div>
     </BuyerLayout>
   );

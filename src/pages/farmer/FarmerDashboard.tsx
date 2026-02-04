@@ -1,24 +1,101 @@
 import { useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight, Eye, DollarSign, CheckCircle, AlertCircle, Shield, Camera, Info } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Plus, Package, ShoppingCart, Wallet, TrendingUp, TrendingDown, Minus, ChevronRight, Eye, DollarSign, CheckCircle, AlertCircle, Shield, Camera, Info, X } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { StatCard } from '@/components/ui/StatCard';
+import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getOrdersByFarmerId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState, getKYCByUserId } from '@/lib/store';
+import { getWalletByUserId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState, getKYCByUserId, setAppState } from '@/lib/store';
+import { useOrderStore } from '@/stores/orderStore';
 import { getProduceImage } from '@/utils/produceImages';
 
 const FarmerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  
-  const wallet = user ? getWalletByUserId(user.id) : null;
-  const allOrders = user ? getOrdersByFarmerId(user.id) : [];
+  const [showPriceInfoModal, setShowPriceInfoModal] = useState(false);
+  // Use Zustand store for orders - single source of truth
+  const { getFarmerOrders, refreshOrders, subscribe } = useOrderStore();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [listings, setListings] = useState<any[]>([]);
+  const [wallet, setWallet] = useState<any>(null);
+  const [kycData, setKycData] = useState<any>(null);
+  const [state, setState] = useState(getAppState());
+
+  // Get orders from Zustand store - always refresh first
+  const allOrders = useMemo(() => {
+    if (!user) return [];
+    // Refresh store before getting orders to ensure we have latest data
+    refreshOrders();
+    return getFarmerOrders(user.id);
+  }, [user, refreshKey, getFarmerOrders, refreshOrders]);
+
+  // Subscribe to order changes for real-time updates
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      setRefreshKey(prev => prev + 1);
+    });
+
+    // Refresh on mount
+    refreshOrders();
+
+    // Refresh when window gains focus
+    const handleFocus = () => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Refresh when localStorage changes (cross-tab updates)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'farmsquare_state') {
+        refreshOrders();
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Refresh every 10 seconds for real-time updates
+    const interval = setInterval(() => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    }, 10000);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [subscribe, refreshOrders, user]);
+
+  // Update other state when user changes
+  useEffect(() => {
+    if (user) {
+      const currentState = getAppState();
+      setListings(getListingsByFarmerId(user.id));
+      setWallet(getWalletByUserId(user.id));
+      // Always get fresh KYC data
+      const freshKycData = getKYCByUserId(user.id);
+      setKycData(freshKycData);
+      setState(currentState);
+      
+      // Also update user's KYC status in context if it changed
+      if (freshKycData && currentState.currentUser && currentState.currentUser.id === user.id) {
+        if (currentState.currentUser.kycStatus !== freshKycData.status) {
+          currentState.currentUser.kycStatus = freshKycData.status;
+          setAppState(currentState);
+        }
+      }
+    } else {
+      setListings([]);
+      setWallet(null);
+      setKycData(null);
+    }
+  }, [refreshKey, user]);
+
   const orders = allOrders.slice(0, 3);
-  const state = getAppState();
-  const listings = user ? getListingsByFarmerId(user.id) : [];
-  const kycData = user ? getKYCByUserId(user.id) : null;
   
   const kycStatus = kycData?.status || 'NOT_STARTED';
   const isKYCApproved = kycStatus === 'APPROVED';
@@ -42,14 +119,17 @@ const FarmerDashboard = () => {
     }
   }, [user, kycStatus, navigate]);
   
-  // Calculate stats
-  const activeListings = listings.filter(l => l.status === 'Active').length;
-  const totalOrders = allOrders.length;
-  const pendingOrders = allOrders.filter(o => o.status === 'Pending').length;
-  const completedOrders = allOrders.filter(o => o.status === 'Delivered').length;
-  const totalRevenue = allOrders
-    .filter(o => o.status === 'Delivered')
-    .reduce((sum, o) => sum + o.amount, 0);
+  // Calculate stats (memoized for performance)
+  const activeListings = useMemo(() => listings.filter(l => l.status === 'Active').length, [listings]);
+  const totalOrders = useMemo(() => allOrders.length, [allOrders]);
+  const pendingOrders = useMemo(() => allOrders.filter(o => o.status === 'Pending').length, [allOrders]);
+  const completedOrders = useMemo(() => allOrders.filter(o => o.status === 'Delivered').length, [allOrders]);
+  const totalRevenue = useMemo(() => 
+    allOrders
+      .filter(o => o.status === 'Delivered')
+      .reduce((sum, o) => sum + o.amount, 0),
+    [allOrders]
+  );
   
   const userListing = listings.find(l => l.status === 'Active');
   const marketPrice = state.marketPrices.find(m => m.commodity === userListing?.commodity);
@@ -93,7 +173,7 @@ const FarmerDashboard = () => {
                     ? 'Verification Under Review'
                     : 'Verification Required'}
                 </p>
-                <p className="text-sm text-muted-foreground mb-3">
+                <p className="text-sm sm:text-base text-muted-foreground mb-3">
                   {kycStatus === 'REJECTED'
                     ? 'Your documents were not approved. Please resubmit to enable withdrawals.'
                     : kycStatus === 'IN_REVIEW'
@@ -102,7 +182,7 @@ const FarmerDashboard = () => {
                 </p>
                 <button
                   onClick={() => navigate('/farmer/kyc')}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                  className={`px-4 py-2 rounded-xl text-sm sm:text-base font-medium ${
                     kycStatus === 'REJECTED'
                       ? 'bg-destructive text-destructive-foreground'
                       : kycStatus === 'IN_REVIEW'
@@ -164,9 +244,9 @@ const FarmerDashboard = () => {
 
         {/* Verification Status Badge */}
         <div className="farm-card bg-gradient-to-r from-[#F0FDF4] to-white border border-[#BBF7D0]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                 isKYCApproved 
                   ? 'bg-[#22C55E]/10' 
                   : kycStatus === 'IN_REVIEW'
@@ -175,7 +255,7 @@ const FarmerDashboard = () => {
                   ? 'bg-destructive/10'
                   : 'bg-farm-warning/10'
               }`}>
-                <Shield className={`w-6 h-6 ${
+                <Shield className={`w-5 h-5 sm:w-6 sm:h-6 ${
                   isKYCApproved 
                     ? 'text-[#22C55E]' 
                     : kycStatus === 'IN_REVIEW'
@@ -185,8 +265,8 @@ const FarmerDashboard = () => {
                     : 'text-farm-warning'
                 }`} />
               </div>
-              <div>
-                <p className="font-semibold text-foreground">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-foreground text-sm sm:text-base">
                   Verification Status: 
                   <span className={`ml-2 ${
                     isKYCApproved 
@@ -202,7 +282,7 @@ const FarmerDashboard = () => {
                      kycStatus === 'REJECTED' ? 'Rejected' : 'Pending'}
                   </span>
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   {isKYCApproved 
                     ? 'All features enabled' 
                     : 'Complete verification to access all features'}
@@ -212,7 +292,7 @@ const FarmerDashboard = () => {
             {!isKYCApproved && (
               <button
                 onClick={() => navigate('/farmer/kyc')}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+                className="w-full sm:w-auto px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs sm:text-sm font-medium hover:opacity-90 whitespace-nowrap"
               >
                 Verify Now
               </button>
@@ -221,7 +301,7 @@ const FarmerDashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             icon={Package}
             label="Active Listings"
@@ -290,7 +370,16 @@ const FarmerDashboard = () => {
         {/* Market Price Intel */}
         {userListing && marketPrice && (
           <div className="farm-card">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">Market Price Intel</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Market Price Intel</h3>
+              <button
+                onClick={() => setShowPriceInfoModal(true)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                title="View Price Information"
+              >
+                <Info className="w-4 h-4 text-muted-foreground hover:text-primary transition-colors" />
+              </button>
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{userListing.commodity}</p>
@@ -315,6 +404,86 @@ const FarmerDashboard = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Price Information Modal */}
+        {userListing && marketPrice && (
+          <Modal 
+            isOpen={showPriceInfoModal} 
+            onClose={() => setShowPriceInfoModal(false)} 
+            title="Market Price Information"
+          >
+            <div className="space-y-4">
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Package className="w-5 h-5 text-primary" />
+                  <h4 className="font-semibold text-foreground">{userListing.commodity} - Grade {userListing.grade}</h4>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Your Listing Price:</span>
+                    <span className="font-semibold text-foreground">{formatNaira(userListing.pricePerKg)}/kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Regional Average:</span>
+                    <span className="font-semibold text-foreground">{formatNaira(marketPrice.regionalPricePerKg)}/kg</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-border">
+                    <span className="text-muted-foreground">Price Difference:</span>
+                    <span className={`font-semibold ${
+                      priceDiff > 0 ? 'text-farm-success' : 
+                      priceDiff < 0 ? 'text-destructive' : 
+                      'text-foreground'
+                    }`}>
+                      {priceDiff > 0 ? '+' : ''}{formatNaira(priceDiff)}/kg
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-farm-success/10 flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-4 h-4 text-farm-success" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-1">What This Means</p>
+                    <p className="text-sm text-muted-foreground">
+                      {priceDiff > 0 
+                        ? `Your price is ${formatNaira(priceDiff)}/kg higher than the regional average. This could indicate premium quality or higher production costs.`
+                        : priceDiff < 0
+                        ? `Your price is ${formatNaira(Math.abs(priceDiff))}/kg lower than the regional average. This could make your listing more competitive.`
+                        : 'Your price matches the regional average, which is competitive.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-farm-info/10 flex items-center justify-center flex-shrink-0">
+                    <Info className="w-4 h-4 text-farm-info" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-1">Pricing Tips</p>
+                    <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                      <li>Monitor regional prices regularly to stay competitive</li>
+                      <li>Consider your production costs when setting prices</li>
+                      <li>Quality and grade can justify premium pricing</li>
+                      <li>Seasonal demand affects market prices</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-border">
+                <button
+                  onClick={() => setShowPriceInfoModal(false)}
+                  className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:opacity-90 transition-opacity"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </Modal>
         )}
 
         {/* Active Listings Preview */}

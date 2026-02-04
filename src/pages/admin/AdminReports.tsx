@@ -6,13 +6,13 @@ import { getAppState, formatNaira } from '@/lib/store';
 const AdminReports = () => {
   const state = getAppState();
   
-  const totalUsers = state.farmers.length + state.buyers.length + state.agents.length;
-  const totalListings = state.listings.length;
-  const activeListings = state.listings.filter(l => l.status === 'Active').length;
-  const totalOrders = state.orders.length;
-  const completedOrders = state.orders.filter(o => o.status === 'Delivered');
+  const totalUsers = (state.farmers || []).length + (state.buyers || []).length + (state.agents || []).length;
+  const totalListings = (state.listings || []).length;
+  const activeListings = (state.listings || []).filter(l => l.status === 'Active').length;
+  const totalOrders = (state.orders || []).length;
+  const completedOrders = (state.orders || []).filter(o => o.status === 'Delivered');
   const totalRevenue = completedOrders.reduce((sum, o) => sum + o.amount, 0);
-  const verifiedFarmers = state.farmers.filter(f => f.kycStatus === 'APPROVED').length;
+  const verifiedFarmers = (state.farmers || []).filter(f => f.kycStatus === 'APPROVED').length;
 
   return (
     <AdminLayout>
@@ -99,11 +99,11 @@ const AdminReports = () => {
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Paused Listings</span>
-                <span className="font-semibold text-farm-warning">{state.listings.filter(l => l.status === 'Paused').length}</span>
+                <span className="font-semibold text-farm-warning">{(state.listings || []).filter(l => l.status === 'Paused').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Sold Listings</span>
-                <span className="font-semibold text-muted-foreground">{state.listings.filter(l => l.status === 'Sold').length}</span>
+                <span className="font-semibold text-muted-foreground">{(state.listings || []).filter(l => l.status === 'Sold').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Total Listings</span>
@@ -121,11 +121,11 @@ const AdminReports = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Pending Orders</span>
-                <span className="font-semibold text-farm-warning">{state.orders.filter(o => o.status === 'Pending').length}</span>
+                <span className="font-semibold text-farm-warning">{(state.orders || []).filter(o => o.status === 'Pending').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">In Transit</span>
-                <span className="font-semibold text-farm-info">{state.orders.filter(o => o.status === 'InTransit').length}</span>
+                <span className="font-semibold text-farm-info">{(state.orders || []).filter(o => o.status === 'InTransit').length}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="text-sm text-muted-foreground">Completed Orders</span>

@@ -12,8 +12,8 @@ const AgentInspectionDetail = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const state = getAppState();
-  const order = state.orders.find(o => o.id === orderId);
-  const listing = order ? state.listings.find(l => l.id === order.listingId) : null;
+  const order = (state.orders || []).find(o => o.id === orderId);
+  const listing = order ? (state.listings || []).find(l => l.id === order.listingId) : null;
 
   const [inspectionPhotos, setInspectionPhotos] = useState<string[]>([]);
   const [inspectionNotes, setInspectionNotes] = useState('');
@@ -303,6 +303,16 @@ const AgentInspectionDetail = () => {
 };
 
 export default AgentInspectionDetail;
+
+
+
+
+
+
+
+
+
+
 
 
 

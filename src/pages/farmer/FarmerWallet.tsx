@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle, Clock, CheckCircle, DollarSign, Copy, Receipt, X } from 'lucide-react';
+import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, AlertCircle, Clock, CheckCircle, DollarSign, Copy, Receipt } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { WalletCard } from '@/components/ui/WalletCard';
 import { Modal } from '@/components/ui/Modal';
@@ -32,10 +32,11 @@ const banks = [
 const FarmerWallet = () => {
   const { user } = useAuth();
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showTransactionReceipt, setShowTransactionReceipt] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [amount, setAmount] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [tab, setTab] = useState<'transactions' | 'withdrawals'>('transactions');
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const wallet = user ? getWalletByUserId(user.id) : null;
   const transactions = user ? getTransactionsByUserId(user.id) : [];
@@ -203,10 +204,13 @@ const FarmerWallet = () => {
                 {transactions.map((txn) => (
                   <div 
                     key={txn.id} 
-                    onClick={() => setSelectedTransaction(txn)}
-                    className="farm-card flex items-center gap-4 hover:bg-muted/50 transition-colors cursor-pointer active:scale-[0.98]"
+                    onClick={() => {
+                      setSelectedTransaction(txn);
+                      setShowTransactionReceipt(true);
+                    }}
+                    className="farm-card flex items-center gap-4 hover:bg-muted/50 transition-colors cursor-pointer active:bg-muted"
                   >
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                       txn.type === 'Credit' ? 'bg-farm-success/10' : 'bg-destructive/10'
                     }`}>
                       {txn.type === 'Credit' ? (
@@ -215,11 +219,11 @@ const FarmerWallet = () => {
                         <ArrowUpRight className="w-6 h-6 text-destructive" />
                       )}
                     </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-foreground">{txn.title}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground truncate">{txn.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">{formatDate(txn.createdAt)}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <p className={`font-bold text-lg ${txn.type === 'Credit' ? 'text-farm-success' : 'text-destructive'}`}>
                         {txn.type === 'Credit' ? '+' : '-'}{formatNaira(txn.amount)}
                       </p>
@@ -284,8 +288,8 @@ const FarmerWallet = () => {
         )}
 
         {/* Withdraw Modal */}
-        <Modal isOpen={showWithdrawModal} onClose={() => setShowWithdrawModal(false)} title="Request Withdrawal">
-          <div className="space-y-4">
+        <Modal isOpen={showWithdrawModal} onClose={() => setShowWithdrawModal(false)} title="Request Withdrawal" className="pb-safe">
+          <div className="space-y-4 pb-24 sm:pb-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">Amount (₦)</label>
               <input
@@ -293,16 +297,16 @@ const FarmerWallet = () => {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="Enter amount"
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
+                className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
               />
-              <p className="text-xs text-muted-foreground mt-1">Available: {formatNaira(wallet?.available || 0)}</p>
+              <p className="text-xs text-muted-foreground mt-2">Available: {formatNaira(wallet?.available || 0)}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">Bank</label>
               <select
                 value={selectedBank}
                 onChange={(e) => setSelectedBank(e.target.value)}
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
+                className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
               >
                 <option value="">Select bank</option>
                 {banks.map((bank) => (
@@ -318,16 +322,138 @@ const FarmerWallet = () => {
                 </p>
               </div>
             )}
-            <div className="pt-2">
+            {/* Submit Button - Always visible and accessible */}
+            <div className="sticky bottom-0 pt-4 pb-2 bg-card -mx-6 px-6 border-t border-border mt-6">
               <button
                 onClick={handleWithdraw}
                 disabled={!amount || !selectedBank || !isKYCApproved}
-                className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity active:scale-[0.98] shadow-lg"
               >
                 Submit Request
               </button>
             </div>
           </div>
+        </Modal>
+
+        {/* Transaction Receipt Modal */}
+        <Modal 
+          isOpen={showTransactionReceipt} 
+          onClose={() => {
+            setShowTransactionReceipt(false);
+            setSelectedTransaction(null);
+          }} 
+          title="Transaction Receipt"
+          className="max-w-md"
+        >
+          {selectedTransaction && (
+            <div className="space-y-6 pb-4">
+              {/* Receipt Header */}
+              <div className="text-center pb-4 border-b border-border">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 ${
+                  selectedTransaction.type === 'Credit' ? 'bg-farm-success/10' : 'bg-destructive/10'
+                }`}>
+                  {selectedTransaction.type === 'Credit' ? (
+                    <ArrowDownLeft className="w-8 h-8 text-farm-success" />
+                  ) : (
+                    <ArrowUpRight className="w-8 h-8 text-destructive" />
+                  )}
+                </div>
+                <p className={`text-3xl font-bold mb-2 ${
+                  selectedTransaction.type === 'Credit' ? 'text-farm-success' : 'text-destructive'
+                }`}>
+                  {selectedTransaction.type === 'Credit' ? '+' : '-'}{formatNaira(selectedTransaction.amount)}
+                </p>
+                <p className="text-sm text-muted-foreground">{selectedTransaction.title}</p>
+              </div>
+
+              {/* Receipt Details */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between py-2 border-b border-border/50">
+                  <span className="text-sm text-muted-foreground">Transaction ID</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-medium text-foreground">{selectedTransaction.id}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedTransaction.id);
+                        toast({ title: 'Transaction ID copied' });
+                      }}
+                      className="p-1 hover:bg-muted rounded transition-colors"
+                      aria-label="Copy transaction ID"
+                    >
+                      <Copy className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between py-2 border-b border-border/50">
+                  <span className="text-sm text-muted-foreground">Type</span>
+                  <span className={`text-sm font-medium px-3 py-1 rounded-full ${
+                    selectedTransaction.type === 'Credit' 
+                      ? 'bg-farm-success/10 text-farm-success' 
+                      : 'bg-destructive/10 text-destructive'
+                  }`}>
+                    {selectedTransaction.type === 'Credit' ? 'Credit' : 'Debit'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b border-border/50">
+                  <span className="text-sm text-muted-foreground">Date & Time</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {new Date(selectedTransaction.createdAt).toLocaleString('en-NG', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-farm-success" />
+                    <span className="text-sm font-medium text-farm-success">Completed</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Receipt Footer */}
+              <div className="pt-4 border-t border-border">
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Receipt className="w-4 h-4" />
+                  <span>FarmSquare Transaction Receipt</span>
+                </div>
+                <p className="text-center text-xs text-muted-foreground mt-2">
+                  This is a digital receipt for your records
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    const receiptText = `Transaction Receipt\n\nAmount: ${formatNaira(selectedTransaction.amount)}\nType: ${selectedTransaction.type}\nDescription: ${selectedTransaction.title}\nTransaction ID: ${selectedTransaction.id}\nDate: ${new Date(selectedTransaction.createdAt).toLocaleString()}\nStatus: Completed`;
+                    navigator.clipboard.writeText(receiptText);
+                    toast({ title: 'Receipt copied to clipboard' });
+                  }}
+                  className="flex-1 py-3 bg-muted text-foreground rounded-xl font-medium hover:bg-muted/80 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Receipt
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTransactionReceipt(false);
+                    setSelectedTransaction(null);
+                  }}
+                  className="flex-1 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:opacity-90 transition-opacity"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
       </div>
     </FarmerLayout>

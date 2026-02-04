@@ -7,11 +7,16 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Public pages
-import LandingPage from "./pages/LandingPage";
+import { LandingPageWithIntro } from "./components/LandingPageWithIntro";
 import AuthPage from "./pages/AuthPage";
 import HowItWorksPage from "./pages/HowItWorksPage";
 import AboutPage from "./pages/AboutPage";
 import ContactPage from "./pages/ContactPage";
+import TermsPage from "./pages/TermsPage";
+import SupportPage from "./pages/SupportPage";
+import PricingPage from "./pages/PricingPage";
+import FAQPage from "./pages/FAQPage";
+import PrivacyPage from "./pages/PrivacyPage";
 import NotFound from "./pages/NotFound";
 
 // Farmer pages
@@ -42,6 +47,7 @@ import AgentDashboard from "./pages/agent/AgentDashboard";
 import AgentFarmers from "./pages/agent/AgentFarmers";
 import AgentInspections from "./pages/agent/AgentInspections";
 import AgentInspectionDetail from "./pages/agent/AgentInspectionDetail";
+import AgentDeliveries from "./pages/agent/AgentDeliveries";
 import AgentReports from "./pages/agent/AgentReports";
 
 // Admin pages
@@ -67,11 +73,16 @@ const App = () => (
           <BrowserRouter basename={import.meta.env.BASE_URL}>
             <Routes>
               {/* Public */}
-              <Route path="/" element={<LandingPage />} />
+              <Route path="/" element={<LandingPageWithIntro />} />
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/how-it-works" element={<HowItWorksPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/support" element={<SupportPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/faq" element={<FAQPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
               
               {/* Farmer */}
               <Route path="/farmer/dashboard" element={<FarmerDashboard />} />
@@ -99,6 +110,7 @@ const App = () => (
               <Route path="/agent/farmers" element={<AgentFarmers />} />
               <Route path="/agent/inspections" element={<AgentInspections />} />
               <Route path="/agent/inspections/:orderId" element={<AgentInspectionDetail />} />
+              <Route path="/agent/deliveries" element={<AgentDeliveries />} />
               <Route path="/agent/reports" element={<AgentReports />} />
               <Route path="/agent/profile" element={<AgentProfile />} />
               

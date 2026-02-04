@@ -7,7 +7,7 @@ const AdminPayments = () => {
   const state = getAppState();
   const transactions = state.transactions;
   const withdrawals = state.withdrawals;
-  const orders = state.orders.filter(o => o.status === 'Delivered');
+  const orders = (state.orders || []).filter(o => o.status === 'Delivered');
   
   const totalRevenue = orders.reduce((sum, o) => sum + o.amount, 0);
   const totalWithdrawals = withdrawals.filter(w => w.status === 'Paid').reduce((sum, w) => sum + w.amount, 0);

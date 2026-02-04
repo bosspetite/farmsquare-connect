@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, User, Package, ShoppingCart, ZoomIn, X, Shield, AlertCircle } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { Modal } from '@/components/ui/Modal';
-import { getAppState, formatNaira, addOrder, setAppState, getWalletByUserId, getKYCByUserId } from '@/lib/store';
+import { getAppState, formatNaira, setAppState, getWalletByUserId, getKYCByUserId } from '@/lib/store';
+import { useOrderStore } from '@/stores/orderStore';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { getProduceImage } from '@/utils/produceImages';
@@ -14,7 +15,7 @@ const BuyerListingDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const state = getAppState();
-  const listing = state.listings.find(l => l.id === listingId);
+  const listing = (state.listings || []).find(l => l.id === listingId);
   
   const kycData = user ? getKYCByUserId(user.id) : null;
   // Only verified if KYC data exists AND status is APPROVED
@@ -82,14 +83,16 @@ const BuyerListingDetail = () => {
     }, 300);
   };
 
+  const { addOrder: addOrderToStore } = useOrderStore();
+
   const handlePaymentSuccess = () => {
     if (!user || !quantity) return;
     
     const qty = parseInt(quantity);
     const amount = qty * listing.pricePerKg;
     
-    // Use shared store helper to add order (handles wallet updates)
-    addOrder({
+    // Use Zustand store to add order (handles wallet updates and syncs everywhere)
+    addOrderToStore({
       buyerId: user.id,
       buyerName: user.name,
       farmerId: listing.farmerId,
@@ -104,13 +107,19 @@ const BuyerListingDetail = () => {
     });
     
     // Update listing quantity
-    const listingIndex = state.listings.findIndex(l => l.id === listing.id);
+    const updatedState = getAppState(); // Get fresh state after addOrder
+    const listingIndex = updatedState.listings.findIndex(l => l.id === listing.id);
     if (listingIndex !== -1) {
-      state.listings[listingIndex].quantityKg -= qty;
-      if (state.listings[listingIndex].quantityKg <= 0) {
-        state.listings[listingIndex].status = 'Sold';
+      updatedState.listings[listingIndex].quantityKg -= qty;
+      if (updatedState.listings[listingIndex].quantityKg <= 0) {
+        updatedState.listings[listingIndex].status = 'Sold';
       }
-      setAppState(state);
+      setAppState(updatedState);
+      
+      // Dispatch event to notify all components of state change
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('farmsquare:state-changed'));
+      }
     }
     
     setShowPaymentGateway(false);
@@ -128,10 +137,7 @@ const BuyerListingDetail = () => {
   return (
     <BuyerLayout>
       <div className="space-y-6 animate-fade-up max-w-2xl mx-auto">
-        <button onClick={() => navigate('/buyer/marketplace')} className="flex items-center gap-2 text-muted-foreground">
-          <ArrowLeft className="w-5 h-5" /> Back to Marketplace
-        </button>
-        <button onClick={() => navigate('/buyer/marketplace')} className="flex items-center gap-2 text-muted-foreground">
+        <button onClick={() => navigate('/buyer/marketplace')} className="flex items-center gap-2 text-muted-foreground mb-2 min-h-[44px] active:scale-[0.98]">
           <ArrowLeft className="w-5 h-5" /> Back to Marketplace
         </button>
 
@@ -283,7 +289,7 @@ const BuyerListingDetail = () => {
                 </p>
                 <button
                   onClick={() => navigate('/buyer/kyc')}
-                  className="px-4 py-2 bg-farm-warning text-white rounded-lg text-sm font-medium"
+                  className="px-4 py-2.5 bg-farm-warning text-white rounded-lg text-sm font-semibold min-h-[44px] active:scale-[0.98]"
                 >
                   Verify Now
                 </button>
@@ -307,7 +313,7 @@ const BuyerListingDetail = () => {
             setShowCheckout(true);
           }}
           disabled={!isVerified}
-          className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold btn-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]"
         >
           <ShoppingCart className="w-5 h-5" />
           {isVerified ? 'Place Order' : 'Verification Required'}
@@ -330,7 +336,7 @@ const BuyerListingDetail = () => {
                 placeholder="Enter quantity"
                 min={listing.minOrderKg || 1}
                 max={listing.quantityKg}
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
+                className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary text-base"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 {listing.minOrderKg ? `Min: ${listing.minOrderKg}kg • ` : ''}Max: {listing.quantityKg}kg
@@ -353,7 +359,7 @@ const BuyerListingDetail = () => {
             <button
               onClick={handleCheckout}
               disabled={!quantity || parseInt(quantity) <= 0}
-              className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
+              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]"
             >
               Proceed to Payment
             </button>

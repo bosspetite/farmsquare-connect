@@ -73,7 +73,7 @@ const FarmerListings = () => {
       
       // Check if listing has active orders (can't reduce quantity below ordered amount)
       const state = getAppState();
-      const activeOrders = state.orders.filter(
+      const activeOrders = (state.orders || []).filter(
         o => o.listingId === editingListing.id && 
         o.status !== 'Rejected' && 
         o.status !== 'Delivered'
@@ -119,17 +119,17 @@ const FarmerListings = () => {
           <h1 className="text-xl font-display font-bold text-foreground">My Listings</h1>
           <button
             onClick={() => navigate('/farmer/create-listing')}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold min-h-[44px] active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" /> Add New
           </button>
         </div>
 
         {/* Filters */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
           <button
             onClick={() => setActiveFilter('All')}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+            className={`px-4 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 min-h-[44px] active:scale-[0.98] ${
               activeFilter === 'All' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'
             }`}
           >
@@ -139,7 +139,7 @@ const FarmerListings = () => {
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-4 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 min-h-[44px] active:scale-[0.98] ${
                 activeFilter === filter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'
               }`}
             >
@@ -186,7 +186,7 @@ const FarmerListings = () => {
                   {listing.status !== 'Archived' && (
                     <button
                       onClick={() => handleEdit(listing)}
-                      className="px-4 py-2 bg-muted text-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-colors"
+                      className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors min-h-[44px] active:scale-[0.98]"
                     >
                       Edit
                     </button>
@@ -195,13 +195,13 @@ const FarmerListings = () => {
                     <>
                       <button
                         onClick={() => handlePauseResume(listing)}
-                        className="px-4 py-2 bg-farm-warning/10 text-farm-warning rounded-xl text-sm font-medium hover:bg-farm-warning/20 transition-colors"
+                        className="px-4 py-2.5 bg-farm-warning/10 text-farm-warning rounded-xl text-sm font-semibold hover:bg-farm-warning/20 transition-colors min-h-[44px] active:scale-[0.98]"
                       >
                         Pause
                       </button>
                       <button
                         onClick={() => handleMarkSoldOut(listing)}
-                        className="px-4 py-2 bg-farm-info/10 text-farm-info rounded-xl text-sm font-medium hover:bg-farm-info/20 transition-colors"
+                        className="px-4 py-2.5 bg-farm-info/10 text-farm-info rounded-xl text-sm font-semibold hover:bg-farm-info/20 transition-colors min-h-[44px] active:scale-[0.98]"
                       >
                         Mark Sold Out
                       </button>
@@ -210,7 +210,7 @@ const FarmerListings = () => {
                   {(listing.status === 'Paused' || listing.status === 'Draft') && (
                     <button
                       onClick={() => handlePauseResume(listing)}
-                      className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-sm font-medium hover:bg-primary/20 transition-colors"
+                      className="px-4 py-2.5 bg-primary/10 text-primary rounded-xl text-sm font-semibold hover:bg-primary/20 transition-colors min-h-[44px] active:scale-[0.98]"
                     >
                       {listing.status === 'Draft' ? 'Publish' : 'Resume'}
                     </button>
@@ -218,7 +218,7 @@ const FarmerListings = () => {
                   {listing.status !== 'Archived' && listing.status !== 'SoldOut' && (
                     <button
                       onClick={() => handleArchive(listing)}
-                      className="px-4 py-2 bg-muted text-foreground rounded-xl text-sm font-medium hover:bg-muted/80 transition-colors"
+                      className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors min-h-[44px] active:scale-[0.98]"
                     >
                       Archive
                     </button>
@@ -226,14 +226,14 @@ const FarmerListings = () => {
                   {listing.status === 'Archived' && (
                     <button
                       onClick={() => handlePauseResume(listing)}
-                      className="px-4 py-2 bg-primary/10 text-primary rounded-xl text-sm font-medium hover:bg-primary/20 transition-colors"
+                      className="px-4 py-2.5 bg-primary/10 text-primary rounded-xl text-sm font-semibold hover:bg-primary/20 transition-colors min-h-[44px] active:scale-[0.98]"
                     >
                       Restore
                     </button>
                   )}
                   <button
                     onClick={() => setDeleteConfirm(listing)}
-                    className="px-4 py-2 bg-destructive/10 text-destructive rounded-xl text-sm font-medium hover:bg-destructive/20 transition-colors"
+                    className="px-4 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-semibold hover:bg-destructive/20 transition-colors min-h-[44px] active:scale-[0.98]"
                   >
                     Delete
                   </button>
@@ -252,7 +252,7 @@ const FarmerListings = () => {
                 type="number"
                 value={editPrice}
                 onChange={(e) => setEditPrice(e.target.value)}
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
+                className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary text-base"
               />
             </div>
             <div>
@@ -261,15 +261,17 @@ const FarmerListings = () => {
                 type="number"
                 value={editQuantity}
                 onChange={(e) => setEditQuantity(e.target.value)}
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground"
+                className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary text-base"
               />
             </div>
-            <button
-              onClick={handleSaveEdit}
-              className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium"
-            >
-              Save Changes
-            </button>
+            <div className="pt-2">
+              <button
+                onClick={handleSaveEdit}
+                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98]"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </Modal>
 
@@ -285,16 +287,16 @@ const FarmerListings = () => {
                 <p className="text-sm text-muted-foreground">{deleteConfirm.quantityKg}kg · {formatNaira(deleteConfirm.pricePerKg)}/kg</p>
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 py-3 bg-muted text-foreground rounded-xl font-medium"
+                className="flex-1 py-4 bg-muted text-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98]"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 py-3 bg-destructive text-destructive-foreground rounded-xl font-medium"
+                className="flex-1 py-4 bg-destructive text-destructive-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98]"
               >
                 Delete
               </button>

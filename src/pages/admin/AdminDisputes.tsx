@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const AdminDisputes = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [refreshKey, setRefreshKey] = useState(0);
   const state = getAppState();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<DisputeStatus | 'all'>('all');
@@ -83,19 +84,25 @@ const AdminDisputes = () => {
     setSelectedDispute(null);
     setResolution('');
     setOutcome('dismissed');
-    setTimeout(() => window.location.reload(), 500);
+    // Refresh state instead of reloading page
+    setTimeout(() => {
+      setRefreshKey(prev => prev + 1);
+    }, 500);
   };
 
   const handleClose = (dispute: Dispute) => {
     if (window.confirm('Are you sure you want to close this dispute?')) {
       updateDisputeStatus(dispute.id, 'Closed');
       toast({ title: 'Dispute closed' });
-      setTimeout(() => window.location.reload(), 500);
+      // Refresh state instead of reloading page
+      setTimeout(() => {
+        setRefreshKey(prev => prev + 1);
+      }, 500);
     }
   };
 
   const getOrderInfo = (orderId: string) => {
-    const order = state.orders.find(o => o.id === orderId);
+    const order = (state.orders || []).find(o => o.id === orderId);
     return order;
   };
 
@@ -362,6 +369,12 @@ const AdminDisputes = () => {
 };
 
 export default AdminDisputes;
+
+
+
+
+
+
 
 
 

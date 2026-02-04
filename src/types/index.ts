@@ -6,13 +6,15 @@ export type KYCStatus = 'NOT_STARTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
 
 export type ListingStatus = 'Draft' | 'Active' | 'Paused' | 'SoldOut' | 'Sold' | 'Archived';
 
-export type OrderStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Cancelled';
+export type OrderStatus = 'Pending' | 'Paid' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Cancelled' | 'Refunded';
+export type PaymentStatus = 'Unpaid' | 'Paid' | 'Escrowed' | 'Released' | 'Refunded';
 
 export type GradeType = 'A' | 'B' | 'C';
 
 export type WithdrawalStatus = 'Submitted' | 'InReview' | 'Paid' | 'Rejected';
 
-export type TransactionType = 'Credit' | 'Debit';
+export type TransactionType = 'Credit' | 'Debit' | 'fund' | 'payment' | 'release' | 'withdrawal' | 'refund' | 'commission';
+export type TransactionStatus = 'pending' | 'completed' | 'failed';
 
 export type DisputeStatus = 'Open' | 'UnderReview' | 'Resolved' | 'Closed';
 
@@ -49,9 +51,11 @@ export interface Admin extends User {
 
 export interface Wallet {
   userId: string;
-  available: number;
-  pending: number;
+  available: number; // Available balance (can be used immediately)
+  pending: number; // Pending balance (awaiting release)
+  locked: number; // Locked balance (in escrow for active orders)
   currency: '₦';
+  withdrawn?: number; // Total withdrawn amount (for farmers)
 }
 
 export interface Listing {
@@ -76,6 +80,23 @@ export interface OrderEvidence {
   timestamp: string;
 }
 
+export type LatLng = { lat: number; lng: number };
+
+export interface OrderTracking {
+  pickup: LatLng;        // farmer location
+  dropoff: LatLng;       // buyer delivery location
+  current: LatLng;       // moving marker (agent)
+  isTracking: boolean;
+  lastUpdatedAt?: string;
+  progressPct?: number;  // 0-100
+  // Legacy fields for backward compatibility
+  currentLocation?: { lat: number; lng: number } | null;
+  route?: { lat: number; lng: number }[];
+  progressPercentage?: number;
+  eta?: number;
+  distanceRemaining?: number;
+}
+
 export interface Order {
   id: string;
   buyerId: string;
@@ -88,9 +109,19 @@ export interface Order {
   pricePerKg: number;
   amount: number;
   status: OrderStatus;
+  paymentStatus?: PaymentStatus; // Payment status for escrow tracking
+  paymentMethod?: 'paystack' | 'wallet'; // How payment was made
+  paymentReference?: string; // Paystack reference if paid via Paystack
   pickupLocation: string;
+  // Location coordinates for tracking
+  buyerLocation?: { lat: number; lng: number };
+  farmerLocation?: { lat: number; lng: number };
+  deliveryLocation?: { lat: number; lng: number };
+  // Tracking data
+  tracking?: OrderTracking;
   createdAt: string;
   acceptedAt?: string;
+  processingAt?: string;
   pickupScheduledAt?: string;
   inTransitAt?: string;
   deliveredAt?: string;
@@ -104,6 +135,10 @@ export interface Transaction {
   title: string;
   amount: number;
   createdAt: string;
+  status?: TransactionStatus;
+  reference?: string; // Paystack reference or transaction ID
+  orderId?: string; // Related order ID if applicable
+  metadata?: Record<string, any>; // Additional data
 }
 
 export interface Withdrawal {
@@ -126,10 +161,11 @@ export interface KYCData {
   userId: string;
   status: KYCStatus;
   submittedAt?: string;
-  // Personal Information
+  rejectionReason?: string; // Reason for rejection if status is REJECTED
+  // Personal Information (for Farmers - KYC)
   fullName?: string;
   phoneNumber?: string;
-  dateOfBirth?: string;
+  dateOfBirth?: string; // Optional - not required for KYB
   address?: string;
   // Identity Verification
   idType?: 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD';
@@ -139,8 +175,15 @@ export interface KYCData {
   // Business Information (for Buyers - KYB)
   businessName?: string;
   businessType?: 'INDIVIDUAL' | 'COMPANY' | 'PARTNERSHIP';
-  businessRegistrationNumber?: string;
-  businessDocumentFile?: string; // File URL or base64
+  businessRegistrationNumber?: string; // CAC Registration Number
+  businessAddress?: string;
+  businessEmail?: string;
+  businessPhone?: string;
+  businessDocumentFile?: string; // CAC Certificate upload
+  // Authorized Representative (for Buyers - KYB)
+  authorizedRepresentativeName?: string; // Full Name
+  authorizedRepresentativeRole?: string; // Role in Business
+  authorizedRepresentativeIdFile?: string; // Government ID upload
 }
 
 export interface Dispute {
@@ -167,6 +210,20 @@ export interface Dispute {
   updatedAt: string;
 }
 
+export interface Escrow {
+  id: string;
+  orderId: string;
+  buyerId: string;
+  farmerId: string;
+  amount: number;
+  commission: number; // Platform commission amount
+  farmerAmount: number; // Amount farmer will receive (after commission)
+  status: 'held' | 'released' | 'refunded';
+  createdAt: string;
+  releasedAt?: string;
+  refundedAt?: string;
+}
+
 export interface AppState {
   currentUser: User | null;
   farmers: Farmer[];
@@ -181,4 +238,6 @@ export interface AppState {
   marketPrices: MarketPriceIntel[];
   kycData: KYCData[];
   disputes: Dispute[];
+  escrows: Escrow[];
+  platformCommission: number; // Total platform commission earned
 }

@@ -35,8 +35,9 @@ const AdminKYCReview = () => {
     updateKYCStatus(userId, 'APPROVED');
     toast({ title: 'KYC Approved', description: `${user.name}'s verification has been approved.` });
     setShowApproveModal(false);
+    // Navigate back to users page instead of reloading
     setTimeout(() => {
-      window.location.reload();
+      navigate('/admin/users');
     }, 500);
   };
 
@@ -45,12 +46,13 @@ const AdminKYCReview = () => {
       toast({ title: 'Rejection reason required', variant: 'destructive' });
       return;
     }
-    updateKYCStatus(userId, 'REJECTED');
+    updateKYCStatus(userId, 'REJECTED', rejectionReason.trim());
     toast({ title: 'KYC Rejected', description: `${user.name}'s verification has been rejected.` });
     setShowRejectModal(false);
     setRejectionReason('');
+    // Navigate back to users page instead of reloading
     setTimeout(() => {
-      window.location.reload();
+      navigate('/admin/users');
     }, 500);
   };
 
@@ -90,30 +92,73 @@ const AdminKYCReview = () => {
           </div>
         </div>
 
-        {/* Personal Information */}
+        {/* Personal Information / Business Information */}
         <div className="farm-card">
           <div className="flex items-center gap-2 mb-4">
             <User className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Personal Information</h3>
+            <h3 className="font-semibold text-foreground">
+              {user.role === 'buyer' ? 'Business Information' : 'Personal Information'}
+            </h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Full Name</p>
-              <p className="font-medium text-foreground">{kycData.fullName || 'Not provided'}</p>
+          {user.role === 'buyer' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Business Name</p>
+                <p className="font-medium text-foreground">{kycData.businessName || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Business Type</p>
+                <p className="font-medium text-foreground">
+                  {kycData.businessType === 'INDIVIDUAL' ? 'Individual Trader' :
+                   kycData.businessType === 'COMPANY' ? 'Registered Company' :
+                   kycData.businessType === 'PARTNERSHIP' ? 'Partnership' : kycData.businessType || 'Not provided'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">CAC Registration Number</p>
+                <p className="font-medium text-foreground">{kycData.businessRegistrationNumber || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Business Address</p>
+                <p className="font-medium text-foreground">{kycData.businessAddress || kycData.address || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Business Email</p>
+                <p className="font-medium text-foreground">{kycData.businessEmail || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Business Phone</p>
+                <p className="font-medium text-foreground">{kycData.businessPhone || kycData.phoneNumber || 'Not provided'}</p>
+              </div>
+              {kycData.authorizedRepresentativeName && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Authorized Representative Name</p>
+                    <p className="font-medium text-foreground">{kycData.authorizedRepresentativeName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Role in Business</p>
+                    <p className="font-medium text-foreground">{kycData.authorizedRepresentativeRole || 'Not provided'}</p>
+                  </div>
+                </>
+              )}
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Phone Number</p>
-              <p className="font-medium text-foreground">{kycData.phoneNumber || 'Not provided'}</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Full Name</p>
+                <p className="font-medium text-foreground">{kycData.fullName || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Phone Number</p>
+                <p className="font-medium text-foreground">{kycData.phoneNumber || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Address</p>
+                <p className="font-medium text-foreground">{kycData.address || 'Not provided'}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Date of Birth</p>
-              <p className="font-medium text-foreground">{kycData.dateOfBirth || 'Not provided'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Address</p>
-              <p className="font-medium text-foreground">{kycData.address || 'Not provided'}</p>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Identity Verification */}
@@ -137,13 +182,13 @@ const AdminKYCReview = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                <FileText className="w-3 h-3" /> ID Document
+                <FileText className="w-3 h-3" /> {user.role === 'buyer' ? 'Authorized Representative ID' : 'ID Document'}
               </p>
-              {kycData.idDocumentFile ? (
+              {(kycData.idDocumentFile || kycData.authorizedRepresentativeIdFile) ? (
                 <div className="border border-border rounded-lg overflow-hidden">
                   <img 
-                    src={kycData.idDocumentFile} 
-                    alt="ID Document" 
+                    src={kycData.authorizedRepresentativeIdFile || kycData.idDocumentFile} 
+                    alt={user.role === 'buyer' ? 'Authorized Representative ID' : 'ID Document'} 
                     className="w-full h-48 object-contain bg-muted"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
@@ -163,11 +208,12 @@ const AdminKYCReview = () => {
                 </div>
               )}
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                <Camera className="w-3 h-3" /> Selfie Photo
-              </p>
-              {kycData.selfieFile ? (
+            {user.role === 'farmer' && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                  <Camera className="w-3 h-3" /> Selfie Photo
+                </p>
+                {kycData.selfieFile ? (
                 <div className="border border-border rounded-lg overflow-hidden">
                   <img 
                     src={kycData.selfieFile} 
@@ -189,8 +235,33 @@ const AdminKYCReview = () => {
                 <div className="border border-border rounded-lg h-48 flex items-center justify-center bg-muted">
                   <p className="text-sm text-muted-foreground">No photo uploaded</p>
                 </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
+            {user.role === 'buyer' && kycData.businessDocumentFile && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                  <FileText className="w-3 h-3" /> CAC Certificate
+                </p>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <img 
+                    src={kycData.businessDocumentFile} 
+                    alt="CAC Certificate" 
+                    className="w-full h-48 object-contain bg-muted"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const parent = e.currentTarget.parentElement;
+                      if (parent && !parent.querySelector('.fallback')) {
+                        const fallback = document.createElement('div');
+                        fallback.className = 'fallback w-full h-48 flex items-center justify-center bg-muted';
+                        fallback.innerHTML = '<p class="text-sm text-muted-foreground">Document not available</p>';
+                        parent.appendChild(fallback);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {kycData.submittedAt && (
@@ -281,6 +352,12 @@ const AdminKYCReview = () => {
 };
 
 export default AdminKYCReview;
+
+
+
+
+
+
 
 
 

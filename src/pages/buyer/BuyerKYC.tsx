@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Camera, CreditCard, CheckCircle, AlertCircle, Info, User, FileText, Building2, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CreditCard, CheckCircle, AlertCircle, Info, User, FileText, Building2, Shield } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { Stepper } from '@/components/ui/Stepper';
 import { FileUploader } from '@/components/ui/FileUploader';
@@ -18,26 +19,29 @@ const steps = [
 ];
 
 const BuyerKYC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [kycData, setKycData] = useState<KYCData | null>(null);
   const [step, setStep] = useState(0);
   
   // Form data
   const [formData, setFormData] = useState({
-    fullName: '',
-    phoneNumber: '',
-    dateOfBirth: '',
-    address: '',
     businessName: '',
     businessType: '' as 'INDIVIDUAL' | 'COMPANY' | 'PARTNERSHIP' | '',
-    businessRegistrationNumber: '',
+    businessRegistrationNumber: '', // CAC Registration Number
+    businessAddress: '',
+    businessEmail: '',
+    businessPhone: '',
+    // Authorized Representative
+    authorizedRepresentativeName: '',
+    authorizedRepresentativeRole: '',
     idType: '' as 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD' | '',
     idNumber: '',
   });
   
-  const [selfieFile, setSelfieFile] = useState<string[]>([]);
   const [idDocumentFile, setIdDocumentFile] = useState<string[]>([]);
   const [businessDocumentFile, setBusinessDocumentFile] = useState<string[]>([]);
+  const [authorizedRepresentativeIdFile, setAuthorizedRepresentativeIdFile] = useState<string[]>([]);
   
   // Load KYC data when component mounts
   useEffect(() => {
@@ -49,20 +53,21 @@ const BuyerKYC = () => {
         // Load existing data if available
         if (data) {
           setFormData({
-            fullName: data.fullName || '',
-            phoneNumber: data.phoneNumber || '',
-            dateOfBirth: data.dateOfBirth || '',
-            address: data.address || '',
             businessName: data.businessName || '',
             businessType: data.businessType || '',
             businessRegistrationNumber: data.businessRegistrationNumber || '',
+            businessAddress: data.businessAddress || data.address || '',
+            businessEmail: data.businessEmail || '',
+            businessPhone: data.businessPhone || data.phoneNumber || '',
+            authorizedRepresentativeName: data.authorizedRepresentativeName || data.fullName || '',
+            authorizedRepresentativeRole: data.authorizedRepresentativeRole || '',
             idType: data.idType || '',
             idNumber: data.idNumber || '',
           });
           
-          if (data.selfieFile) setSelfieFile([data.selfieFile]);
           if (data.idDocumentFile) setIdDocumentFile([data.idDocumentFile]);
           if (data.businessDocumentFile) setBusinessDocumentFile([data.businessDocumentFile]);
+          if (data.authorizedRepresentativeIdFile) setAuthorizedRepresentativeIdFile([data.authorizedRepresentativeIdFile]);
           
           // Set step based on status
           if (data.status === 'APPROVED') {
@@ -76,8 +81,8 @@ const BuyerKYC = () => {
           // Pre-fill with user data
           setFormData(prev => ({
             ...prev,
-            fullName: user.name || '',
-            phoneNumber: user.phone || '',
+            businessPhone: user.phone || '',
+            authorizedRepresentativeName: user.name || '',
           }));
         }
       } catch (error) {
@@ -91,18 +96,6 @@ const BuyerKYC = () => {
   };
 
   const validateStep1 = (): boolean => {
-    if (!formData.fullName.trim()) {
-      toast({ title: 'Full name is required', variant: 'destructive' });
-      return false;
-    }
-    if (!formData.phoneNumber.trim()) {
-      toast({ title: 'Phone number is required', variant: 'destructive' });
-      return false;
-    }
-    if (!formData.address.trim()) {
-      toast({ title: 'Address is required', variant: 'destructive' });
-      return false;
-    }
     if (!formData.businessName.trim()) {
       toast({ title: 'Business name is required', variant: 'destructive' });
       return false;
@@ -111,8 +104,28 @@ const BuyerKYC = () => {
       toast({ title: 'Business type is required', variant: 'destructive' });
       return false;
     }
-    if (formData.businessType === 'COMPANY' && !formData.businessRegistrationNumber.trim()) {
-      toast({ title: 'Business registration number is required for companies', variant: 'destructive' });
+    if (!formData.businessRegistrationNumber.trim()) {
+      toast({ title: 'CAC Registration Number is required', variant: 'destructive' });
+      return false;
+    }
+    if (!formData.businessAddress.trim()) {
+      toast({ title: 'Business address is required', variant: 'destructive' });
+      return false;
+    }
+    if (!formData.businessEmail.trim()) {
+      toast({ title: 'Business email is required', variant: 'destructive' });
+      return false;
+    }
+    if (!formData.businessPhone.trim()) {
+      toast({ title: 'Business phone is required', variant: 'destructive' });
+      return false;
+    }
+    if (!formData.authorizedRepresentativeName.trim()) {
+      toast({ title: 'Authorized representative name is required', variant: 'destructive' });
+      return false;
+    }
+    if (!formData.authorizedRepresentativeRole.trim()) {
+      toast({ title: 'Role in business is required', variant: 'destructive' });
       return false;
     }
     return true;
@@ -127,16 +140,12 @@ const BuyerKYC = () => {
       toast({ title: 'ID number is required', variant: 'destructive' });
       return false;
     }
-    if (selfieFile.length === 0) {
-      toast({ title: 'Selfie photo is required', variant: 'destructive' });
+    if (authorizedRepresentativeIdFile.length === 0) {
+      toast({ title: 'Authorized representative government ID is required', variant: 'destructive' });
       return false;
     }
-    if (idDocumentFile.length === 0) {
-      toast({ title: 'ID document is required', variant: 'destructive' });
-      return false;
-    }
-    if (formData.businessType === 'COMPANY' && businessDocumentFile.length === 0) {
-      toast({ title: 'Business registration document is required', variant: 'destructive' });
+    if (businessDocumentFile.length === 0) {
+      toast({ title: 'CAC Certificate is required', variant: 'destructive' });
       return false;
     }
     return true;
@@ -170,12 +179,17 @@ const BuyerKYC = () => {
       updateKYCData(user.id, {
         ...formData,
         idType: formData.idType as 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD',
-        selfieFile: selfieFile[0],
-        idDocumentFile: idDocumentFile[0],
-        businessDocumentFile: businessDocumentFile.length > 0 ? businessDocumentFile[0] : undefined,
+        idDocumentFile: authorizedRepresentativeIdFile[0],
+        businessDocumentFile: businessDocumentFile[0],
         businessName: formData.businessName,
         businessType: formData.businessType as 'INDIVIDUAL' | 'COMPANY' | 'PARTNERSHIP',
         businessRegistrationNumber: formData.businessRegistrationNumber,
+        businessAddress: formData.businessAddress,
+        businessEmail: formData.businessEmail,
+        businessPhone: formData.businessPhone,
+        authorizedRepresentativeName: formData.authorizedRepresentativeName,
+        authorizedRepresentativeRole: formData.authorizedRepresentativeRole,
+        authorizedRepresentativeIdFile: authorizedRepresentativeIdFile[0],
         status: 'IN_REVIEW',
         submittedAt: new Date().toISOString(),
       });
@@ -185,16 +199,15 @@ const BuyerKYC = () => {
       setKycData(updatedData);
       setStep(2); // Move to review step
       
-      // Force a small delay to ensure state is updated, then refresh page to update user context
-      setTimeout(() => {
-        // Reload to refresh user context with updated kycStatus
-        window.location.reload();
-      }, 500);
-      
       toast({ 
         title: 'Verification submitted for review', 
         description: 'Your documents are being verified. This usually takes 24-48 hours.' 
       });
+      
+      // Redirect to dashboard after submission
+      setTimeout(() => {
+        navigate('/buyer/dashboard');
+      }, 1500);
     } catch (error) {
       console.error('Error submitting KYC:', error);
       toast({ 
@@ -213,9 +226,9 @@ const BuyerKYC = () => {
       status: 'NOT_STARTED',
     });
     
-    setSelfieFile([]);
     setIdDocumentFile([]);
     setBusinessDocumentFile([]);
+    setAuthorizedRepresentativeIdFile([]);
     setStep(0);
     
     const updatedData = getKYCByUserId(user.id);
@@ -254,6 +267,11 @@ const BuyerKYC = () => {
               <AlertCircle className="w-6 h-6 text-destructive" />
               <div className="flex-1">
                 <p className="font-semibold text-foreground">Verification Rejected</p>
+                {kycData.rejectionReason && (
+                  <p className="text-sm text-muted-foreground mb-2 mt-1">
+                    <strong>Reason:</strong> {kycData.rejectionReason}
+                  </p>
+                )}
                 <p className="text-sm text-muted-foreground mb-3">Please review your documents and resubmit</p>
                 <button
                   onClick={handleResubmit}
@@ -284,41 +302,10 @@ const BuyerKYC = () => {
 
             {/* Step 1: Business Information */}
             {step === 0 && (
-              <div className="farm-card space-y-4">
+              <div className="farm-card space-y-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Building2 className="w-5 h-5 text-primary" />
                   <h2 className="font-semibold text-foreground">Business Information</h2>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="fullName">Full Name *</Label>
-                    <Input
-                      id="fullName"
-                      value={formData.fullName}
-                      onChange={(e) => updateFormField('fullName', e.target.value)}
-                      placeholder="Enter your full name"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="phoneNumber">Phone Number *</Label>
-                    <Input
-                      id="phoneNumber"
-                      value={formData.phoneNumber}
-                      onChange={(e) => updateFormField('phoneNumber', e.target.value)}
-                      placeholder="Enter phone number"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="address">Business Address *</Label>
-                  <Input
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => updateFormField('address', e.target.value)}
-                    placeholder="Enter business address"
-                  />
                 </div>
 
                 <div>
@@ -345,26 +332,71 @@ const BuyerKYC = () => {
                   </Select>
                 </div>
 
-                {formData.businessType === 'COMPANY' && (
-                  <div>
-                    <Label htmlFor="businessRegistrationNumber">Business Registration Number *</Label>
-                    <Input
-                      id="businessRegistrationNumber"
-                      value={formData.businessRegistrationNumber}
-                      onChange={(e) => updateFormField('businessRegistrationNumber', e.target.value)}
-                      placeholder="Enter registration number"
-                    />
-                  </div>
-                )}
+                <div>
+                  <Label htmlFor="businessRegistrationNumber">CAC Registration Number *</Label>
+                  <Input
+                    id="businessRegistrationNumber"
+                    value={formData.businessRegistrationNumber}
+                    onChange={(e) => updateFormField('businessRegistrationNumber', e.target.value)}
+                    placeholder="Enter CAC registration number"
+                  />
+                </div>
 
                 <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Label htmlFor="businessAddress">Business Address *</Label>
                   <Input
-                    id="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => updateFormField('dateOfBirth', e.target.value)}
+                    id="businessAddress"
+                    value={formData.businessAddress}
+                    onChange={(e) => updateFormField('businessAddress', e.target.value)}
+                    placeholder="Enter business address"
                   />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="businessEmail">Business Email *</Label>
+                    <Input
+                      id="businessEmail"
+                      type="email"
+                      value={formData.businessEmail}
+                      onChange={(e) => updateFormField('businessEmail', e.target.value)}
+                      placeholder="business@example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="businessPhone">Business Phone *</Label>
+                    <Input
+                      id="businessPhone"
+                      type="tel"
+                      value={formData.businessPhone}
+                      onChange={(e) => updateFormField('businessPhone', e.target.value)}
+                      placeholder="+234 801 234 5678"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-border">
+                  <h3 className="font-semibold text-foreground mb-4">Authorized Representative</h3>
+                  
+                  <div>
+                    <Label htmlFor="authorizedRepresentativeName">Full Name *</Label>
+                    <Input
+                      id="authorizedRepresentativeName"
+                      value={formData.authorizedRepresentativeName}
+                      onChange={(e) => updateFormField('authorizedRepresentativeName', e.target.value)}
+                      placeholder="Enter full name"
+                    />
+                  </div>
+
+                  <div className="mt-4">
+                    <Label htmlFor="authorizedRepresentativeRole">Role in Business *</Label>
+                    <Input
+                      id="authorizedRepresentativeRole"
+                      value={formData.authorizedRepresentativeRole}
+                      onChange={(e) => updateFormField('authorizedRepresentativeRole', e.target.value)}
+                      placeholder="e.g., Director, CEO, Owner, Manager"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -377,65 +409,54 @@ const BuyerKYC = () => {
                   <h2 className="font-semibold text-foreground">Identity Verification</h2>
                 </div>
 
-                <div>
-                  <Label htmlFor="idType">ID Type *</Label>
-                  <Select value={formData.idType} onValueChange={(value) => updateFormField('idType', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select ID type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NIN">National Identification Number (NIN)</SelectItem>
-                      <SelectItem value="PASSPORT">International Passport</SelectItem>
-                      <SelectItem value="DRIVERS_LICENSE">Driver's License</SelectItem>
-                      <SelectItem value="VOTERS_CARD">Voter's Card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="idNumber">ID Number *</Label>
-                  <Input
-                    id="idNumber"
-                    value={formData.idNumber}
-                    onChange={(e) => updateFormField('idNumber', e.target.value)}
-                    placeholder="Enter ID number"
-                  />
-                </div>
-
-                <div>
-                  <Label>Selfie Photo *</Label>
-                  <FileUploader 
-                    files={selfieFile} 
-                    onFilesChange={setSelfieFile} 
-                    maxFiles={1}
-                    accept="image/*"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Take a clear selfie holding your ID</p>
-                </div>
-
-                <div>
-                  <Label>ID Document Photo *</Label>
-                  <FileUploader 
-                    files={idDocumentFile} 
-                    onFilesChange={setIdDocumentFile} 
-                    maxFiles={1}
-                    accept="image/*"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Upload a clear photo of your ID document</p>
-                </div>
-
-                {formData.businessType === 'COMPANY' && (
+                <div className="space-y-4">
                   <div>
-                    <Label>Business Registration Document *</Label>
+                    <Label htmlFor="idType">Government ID Type *</Label>
+                    <Select value={formData.idType} onValueChange={(value) => updateFormField('idType', value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select ID type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NIN">National Identification Number (NIN)</SelectItem>
+                        <SelectItem value="PASSPORT">International Passport</SelectItem>
+                        <SelectItem value="DRIVERS_LICENSE">Driver's License</SelectItem>
+                        <SelectItem value="VOTERS_CARD">Voter's Card</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="idNumber">ID Number *</Label>
+                    <Input
+                      id="idNumber"
+                      value={formData.idNumber}
+                      onChange={(e) => updateFormField('idNumber', e.target.value)}
+                      placeholder="Enter ID number"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Authorized Representative Government ID *</Label>
+                    <FileUploader 
+                      files={authorizedRepresentativeIdFile} 
+                      onFilesChange={setAuthorizedRepresentativeIdFile} 
+                      maxFiles={1}
+                      accept="image/*,.pdf"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Upload a clear photo or scan of the authorized representative's government ID</p>
+                  </div>
+
+                  <div>
+                    <Label>CAC Certificate *</Label>
                     <FileUploader 
                       files={businessDocumentFile} 
                       onFilesChange={setBusinessDocumentFile} 
                       maxFiles={1}
                       accept="image/*,.pdf"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Upload business registration certificate</p>
+                    <p className="text-xs text-muted-foreground mt-1">Upload your CAC registration certificate</p>
                   </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -449,18 +470,6 @@ const BuyerKYC = () => {
 
                 <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Full Name</p>
-                    <p className="text-foreground">{formData.fullName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Phone Number</p>
-                    <p className="text-foreground">{formData.phoneNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Business Address</p>
-                    <p className="text-foreground">{formData.address}</p>
-                  </div>
-                  <div>
                     <p className="text-sm font-medium text-muted-foreground mb-1">Business Name</p>
                     <p className="text-foreground">{formData.businessName}</p>
                   </div>
@@ -472,12 +481,37 @@ const BuyerKYC = () => {
                        formData.businessType === 'PARTNERSHIP' ? 'Partnership' : formData.businessType}
                     </p>
                   </div>
-                  {formData.businessType === 'COMPANY' && formData.businessRegistrationNumber && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">CAC Registration Number</p>
+                    <p className="text-foreground">{formData.businessRegistrationNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Business Address</p>
+                    <p className="text-foreground">{formData.businessAddress}</p>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Business Registration Number</p>
-                      <p className="text-foreground">{formData.businessRegistrationNumber}</p>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Business Email</p>
+                      <p className="text-foreground">{formData.businessEmail}</p>
                     </div>
-                  )}
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Business Phone</p>
+                      <p className="text-foreground">{formData.businessPhone}</p>
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-sm font-semibold text-foreground mb-3">Authorized Representative</p>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Full Name</p>
+                        <p className="text-foreground">{formData.authorizedRepresentativeName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Role in Business</p>
+                        <p className="text-foreground">{formData.authorizedRepresentativeRole}</p>
+                      </div>
+                    </div>
+                  </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground mb-1">ID Type</p>
                     <p className="text-foreground">
@@ -534,6 +568,12 @@ const BuyerKYC = () => {
 };
 
 export default BuyerKYC;
+
+
+
+
+
+
 
 
 

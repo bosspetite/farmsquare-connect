@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, User, Package } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
@@ -7,25 +8,60 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getAppState, updateOrderStatus, formatNaira, formatDate } from '@/lib/store';
 import { OrderStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { useOrderStore } from '@/stores/orderStore';
 
 const FarmerOrderDetail = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const state = getAppState();
-  const order = state.orders.find(o => o.id === orderId);
-
-  if (!order) {
-    return (
-      <FarmerLayout>
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Order not found</p>
-        </div>
-      </FarmerLayout>
-    );
-  }
+  const { getOrderById, refreshOrders, subscribe, updateOrderStatus: updateOrderStatusInStore } = useOrderStore();
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Get order from Zustand store - always refresh first
+  const order = useMemo(() => {
+    if (!orderId) return undefined;
+    // Refresh store before getting order to ensure we have latest data
+    refreshOrders();
+    return getOrderById(orderId);
+  }, [orderId, refreshKey, getOrderById, refreshOrders]);
+  
+  // Subscribe to order changes for real-time updates
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    refreshOrders(); // Initial load
+    
+    const handleFocus = () => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('focus', handleFocus);
+    
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'farmsquare_state') {
+        refreshOrders();
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    const interval = setInterval(() => {
+      refreshOrders();
+      setRefreshKey(prev => prev + 1);
+    }, 5000);
+    
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [subscribe, refreshOrders]);
 
   const getTimelineEvents = () => {
+    if (!order) return [];
     const events = [
       { 
         label: 'Order Placed', 
@@ -38,21 +74,21 @@ const FarmerOrderDetail = () => {
         timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined, 
         completed: !!order.acceptedAt, 
         current: order.status === 'Pending',
-        description: order.acceptedAt ? 'Order accepted' : 'Waiting for acceptance'
+        description: order.acceptedAt ? 'Order accepted, preparing for processing' : 'Waiting for acceptance'
       },
       { 
         label: 'Processing', 
-        timestamp: order.status === 'Processing' ? new Date().toISOString() : undefined, 
-        completed: ['Processing', 'PickupScheduled', 'InTransit', 'Delivered'].includes(order.status), 
+        timestamp: order.processingAt ? formatDate(order.processingAt) : undefined, 
+        completed: !!order.processingAt || order.status === 'Processing' || ['PickupScheduled', 'InTransit', 'Delivered'].includes(order.status), 
         current: order.status === 'Accepted',
-        description: 'Preparing produce for pickup'
+        description: order.processingAt ? 'Order is being processed and prepared' : 'Mark as processing when preparing order'
       },
       { 
-        label: 'Ready for Pickup', 
+        label: 'Pickup Scheduled', 
         timestamp: order.pickupScheduledAt ? formatDate(order.pickupScheduledAt) : undefined, 
         completed: !!order.pickupScheduledAt, 
         current: order.status === 'Processing',
-        description: order.pickupScheduledAt ? 'Ready for buyer pickup' : 'Mark as ready when produce is prepared'
+        description: order.pickupScheduledAt ? 'Pickup date confirmed' : 'Schedule pickup date'
       },
       { 
         label: 'In Transit', 
@@ -80,6 +116,7 @@ const FarmerOrderDetail = () => {
   };
 
   const getNextStatus = (): OrderStatus | null => {
+    if (!order) return null;
     switch (order.status) {
       case 'Accepted': return 'Processing';
       case 'Processing': return 'PickupScheduled';
@@ -90,31 +127,48 @@ const FarmerOrderDetail = () => {
   };
 
   const handleProgress = () => {
+    if (!order) return;
     const nextStatus = getNextStatus();
     if (nextStatus) {
-      updateOrderStatus(order.id, nextStatus);
+      updateOrderStatusInStore(order.id, nextStatus);
       toast({ 
         title: 'Order status updated',
         description: nextStatus === 'Delivered' ? 'Waiting for buyer confirmation to release payment.' : undefined
       });
-      // Use setTimeout to allow state to update before reload
-      setTimeout(() => window.location.reload(), 100);
+      setRefreshKey(prev => prev + 1);
     }
   };
   
   const handleAccept = () => {
-    updateOrderStatus(order.id, 'Accepted');
+    if (!order) return;
+    updateOrderStatusInStore(order.id, 'Accepted');
     toast({ title: 'Order accepted!' });
-    setTimeout(() => window.location.reload(), 100);
+    setRefreshKey(prev => prev + 1);
   };
   
   const handleReject = () => {
+    if (!order) return;
     if (window.confirm('Are you sure you want to reject this order? The buyer will be refunded.')) {
-      updateOrderStatus(order.id, 'Rejected');
+      updateOrderStatusInStore(order.id, 'Rejected');
       toast({ title: 'Order rejected. Buyer has been refunded.' });
-      setTimeout(() => window.location.reload(), 100);
+      setRefreshKey(prev => prev + 1);
     }
   };
+
+  if (!order) {
+    return (
+      <FarmerLayout>
+        <div className="space-y-6 animate-fade-up">
+          <button onClick={() => navigate('/farmer/orders')} className="flex items-center gap-2 text-muted-foreground">
+            <ArrowLeft className="w-5 h-5" /> Back to Orders
+          </button>
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Order not found</p>
+          </div>
+        </div>
+      </FarmerLayout>
+    );
+  }
 
   const nextStatus = getNextStatus();
 
@@ -246,10 +300,7 @@ const FarmerOrderDetail = () => {
             onClick={handleProgress}
             className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
           >
-            Mark as {nextStatus === 'Processing' ? 'Processing' : 
-                     nextStatus === 'PickupScheduled' ? 'Ready for Pickup' : 
-                     nextStatus === 'InTransit' ? 'In Transit' : 
-                     'Delivered'}
+            Mark as {nextStatus === 'Processing' ? 'Processing' : nextStatus === 'PickupScheduled' ? 'Pickup Scheduled' : nextStatus === 'InTransit' ? 'In Transit' : 'Delivered'}
           </button>
         )}
       </div>
