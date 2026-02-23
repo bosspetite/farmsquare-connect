@@ -471,6 +471,17 @@ export const getTransactions = async (userId: string): Promise<TransactionRow[]>
   return data || [];
 };
 
+/** Get all transactions (admin) */
+export const getAllTransactions = async (): Promise<TransactionRow[]> => {
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) console.error('getAllTransactions error:', error.message);
+  return data || [];
+};
+
 /** Request withdrawal */
 export const requestWithdrawal = async (params: {
   userId: string;
@@ -802,5 +813,96 @@ export const resolveDispute = async (
     return false;
   }
   return true;
+};
+
+// ════════════════════════════════════════════════════════════════════
+// WITHDRAWALS (Admin)
+// ════════════════════════════════════════════════════════════════════
+
+/** Get all withdrawal requests (admin) */
+export const getAllWithdrawals = async () => {
+  const { data, error } = await supabase
+    .from('payout_requests')
+    .select('*, profiles!payout_requests_user_id_fkey(full_name, phone)')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('getAllWithdrawals error:', error.message);
+    return [];
+  }
+
+  // Transform to match frontend format
+  return (data || []).map((w: any) => ({
+    id: w.id,
+    userId: w.user_id,
+    userName: w.profiles?.full_name || 'Unknown',
+    amount: Number(w.amount),
+    bankName: w.bank_name,
+    accountMasked: `****${w.account_number.slice(-4)}`,
+    accountNumber: w.account_number, // Full number for admin
+    accountName: w.account_name,
+    status: w.status,
+    createdAt: w.created_at,
+    updatedAt: w.updated_at,
+  }));
+};
+
+/** Update withdrawal status (admin) */
+export const updateWithdrawalStatus = async (
+  withdrawalId: string,
+  status: string
+): Promise<boolean> => {
+  const { error } = await supabase
+    .from('payout_requests')
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', withdrawalId);
+
+  if (error) {
+    console.error('updateWithdrawalStatus error:', error.message);
+    return false;
+  }
+  return true;
+};
+
+// ════════════════════════════════════════════════════════════════════
+// LOGISTICS (Admin)
+// ════════════════════════════════════════════════════════════════════
+
+/** Get logistics data for orders */
+export const getLogisticsData = async () => {
+  const { data, error } = await supabase
+    .from('logistics')
+    .select('*, orders(*, profiles!orders_buyer_id_fkey(full_name), profiles!orders_farmer_id_fkey(full_name))')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('getLogisticsData error:', error.message);
+    return [];
+  }
+
+  // Transform to match frontend format
+  return (data || []).map((log: any) => ({
+    id: log.id,
+    orderId: log.order_id,
+    agentId: log.agent_id,
+    status: log.status,
+    pickupAddress: log.pickup_address,
+    deliveryAddress: log.delivery_address,
+    pickupLocation: log.pickup_location,
+    deliveryLocation: log.delivery_location,
+    currentLocation: log.current_location,
+    progressPercentage: log.progress_percentage,
+    createdAt: log.created_at,
+    updatedAt: log.updated_at,
+    order: log.orders ? {
+      ...log.orders,
+      buyerName: log.orders.profiles?.full_name || 'Unknown',
+      farmerName: log.orders.profiles?.full_name || 'Unknown',
+    } : null,
+  }));
 };
 
