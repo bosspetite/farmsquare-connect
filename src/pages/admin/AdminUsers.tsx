@@ -1,41 +1,67 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, UserCheck, UserX, Clock, Eye, Package, ShoppingCart, Shield, CheckCircle, XCircle, AlertCircle, Phone, MapPin } from 'lucide-react';
+import { Users, Search, UserCheck, UserX, Clock, Eye, Package, ShoppingCart, Shield, CheckCircle, XCircle, AlertCircle, Phone, MapPin, Loader2 } from 'lucide-react';
 import { AdminLayout } from '@/components/layouts/AdminLayout';
-import { getAppState, formatDate, getListingsByFarmerId, getOrdersByFarmerId, getKYCByUserId } from '@/lib/store';
+import { getAllProfiles, getListingsByFarmer, getOrdersByFarmer } from '@/services/databaseService';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/Modal';
+import { formatDate } from '@/lib/store';
 
 const AdminUsers = () => {
   const navigate = useNavigate();
-  const state = getAppState();
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [filterRole, setFilterRole] = React.useState<'all' | 'farmer' | 'buyer' | 'agent'>('all');
-  const [filterKYC, setFilterKYC] = React.useState<'all' | 'NOT_STARTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED'>('all');
+  const [loading, setLoading] = useState(true);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterRole, setFilterRole] = useState<'all' | 'farmer' | 'buyer' | 'agent'>('all');
+  const [filterKYC, setFilterKYC] = useState<'all' | 'NOT_STARTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED'>('all');
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  
-  // Defensive checks for arrays
-  const farmers = state.farmers || [];
-  const buyers = state.buyers || [];
-  const agents = state.agents || [];
-  
-  const allUsers = [
-    ...farmers.map(f => ({ ...f, role: 'farmer' as const })),
-    ...buyers.map(b => ({ ...b, role: 'buyer' as const })),
-    ...agents.map(a => ({ ...a, role: 'agent' as const })),
-  ];
+  const [userStats, setUserStats] = useState<Record<string, { listings: number; orders: number }>>({});
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      setLoading(true);
+      try {
+        const profiles = await getAllProfiles();
+        // Filter out admins from the list
+        const nonAdminProfiles = profiles.filter(p => p.role !== 'admin');
+        setAllUsers(nonAdminProfiles);
+
+        // Load stats for farmers
+        const stats: Record<string, { listings: number; orders: number }> = {};
+        for (const user of nonAdminProfiles.filter(u => u.role === 'farmer')) {
+          const [listings, orders] = await Promise.all([
+            getListingsByFarmer(user.id),
+            getOrdersByFarmer(user.id),
+          ]);
+          stats[user.id] = { listings: listings.length, orders: orders.length };
+        }
+        setUserStats(stats);
+      } catch (err: any) {
+        console.error('Error loading users:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUsers();
+  }, []);
 
   const filteredUsers = allUsers.filter(user => {
     const matchesSearch = 
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.phone.includes(searchQuery) ||
-      user.region.toLowerCase().includes(searchQuery.toLowerCase());
+      user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.phone?.includes(searchQuery) ||
+      user.state?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.address?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesRole = filterRole === 'all' || user.role === filterRole;
-    const matchesKYC = filterKYC === 'all' || user.kycStatus === filterKYC;
+    const kycStatus = user.role === 'buyer' ? (user.kyb_status || user.kyc_status) : user.kyc_status;
+    const matchesKYC = filterKYC === 'all' || kycStatus === filterKYC;
     
     return matchesSearch && matchesRole && matchesKYC;
   });
+
+  const farmers = allUsers.filter(u => u.role === 'farmer');
+  const buyers = allUsers.filter(u => u.role === 'buyer');
+  const agents = allUsers.filter(u => u.role === 'agent');
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -69,6 +95,16 @@ const AdminUsers = () => {
         );
     }
   };
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -147,21 +183,20 @@ const AdminUsers = () => {
           ) : (
             <div className="space-y-2">
               {filteredUsers.map((user) => {
-                const kycData = getKYCByUserId(user.id);
-                const listings = user.role === 'farmer' ? getListingsByFarmerId(user.id) : [];
-                const orders = user.role === 'farmer' ? getOrdersByFarmerId(user.id) : [];
-                const hasKYCData = kycData && (kycData.status === 'IN_REVIEW' || kycData.status === 'APPROVED' || kycData.status === 'REJECTED');
+                const kycStatus = user.role === 'buyer' ? (user.kyb_status || user.kyc_status) : user.kyc_status;
+                const hasKYCData = kycStatus === 'IN_REVIEW' || kycStatus === 'APPROVED' || kycStatus === 'REJECTED';
+                const stats = userStats[user.id] || { listings: 0, orders: 0 };
                 
                 return (
                   <div
                     key={user.id}
                     className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-white dark:bg-card border border-border rounded-xl transition-all ${
-                      hasKYCData && user.kycStatus === 'IN_REVIEW' 
+                      hasKYCData && kycStatus === 'IN_REVIEW' 
                         ? 'hover:border-primary/20 hover:shadow-md cursor-pointer' 
                         : 'hover:border-border/50'
                     }`}
                     onClick={() => {
-                      if (hasKYCData && user.kycStatus === 'IN_REVIEW') {
+                      if (hasKYCData && kycStatus === 'IN_REVIEW') {
                         navigate(`/admin/users/${user.id}/kyc`);
                       }
                     }}
@@ -172,11 +207,11 @@ const AdminUsers = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          <p className="font-semibold text-foreground text-sm sm:text-base">{user.name}</p>
+                          <p className="font-semibold text-foreground text-sm sm:text-base">{user.full_name}</p>
                           <span className="px-2 sm:px-2.5 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-semibold uppercase tracking-wide">
                             {user.role}
                           </span>
-                          {user.kycStatus === 'IN_REVIEW' && (
+                          {kycStatus === 'IN_REVIEW' && (
                             <span className="px-2 py-0.5 bg-farm-warning/10 text-farm-warning rounded-md text-xs font-medium flex items-center gap-1">
                               <Shield className="w-3 h-3" />
                               Review Required
@@ -186,19 +221,19 @@ const AdminUsers = () => {
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground mb-1.5">
                           <span>{user.phone}</span>
                           <span className="hidden sm:inline">•</span>
-                          <span>{user.region}</span>
+                          <span>{user.state || user.address || 'N/A'}</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
-                          <span>Joined {formatDate(user.createdAt)}</span>
+                          <span>Joined {formatDate(user.created_at)}</span>
                           {user.role === 'farmer' && (
                             <>
                               <span className="flex items-center gap-1">
                                 <Package className="w-3 h-3" />
-                                {listings.length} listing{listings.length !== 1 ? 's' : ''}
+                                {stats.listings} listing{stats.listings !== 1 ? 's' : ''}
                               </span>
                               <span className="flex items-center gap-1">
                                 <ShoppingCart className="w-3 h-3" />
-                                {orders.length} order{orders.length !== 1 ? 's' : ''}
+                                {stats.orders} order{stats.orders !== 1 ? 's' : ''}
                               </span>
                             </>
                           )}
@@ -206,8 +241,8 @@ const AdminUsers = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 w-full sm:w-auto justify-between sm:justify-start">
-                      <div className="flex-shrink-0">{getStatusBadge(user.kycStatus)}</div>
-                      {hasKYCData && user.kycStatus === 'IN_REVIEW' && (
+                      <div className="flex-shrink-0">{getStatusBadge(kycStatus || 'NOT_STARTED')}</div>
+                      {hasKYCData && kycStatus === 'IN_REVIEW' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -220,7 +255,7 @@ const AdminUsers = () => {
                           <span className="sm:hidden">Review</span>
                         </button>
                       )}
-                      {hasKYCData && (user.kycStatus === 'APPROVED' || user.kycStatus === 'REJECTED') && (
+                      {hasKYCData && (kycStatus === 'APPROVED' || kycStatus === 'REJECTED') && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -256,7 +291,7 @@ const AdminUsers = () => {
           <Modal
             isOpen={!!selectedUser}
             onClose={() => setSelectedUser(null)}
-            title={`${selectedUser.role === 'farmer' ? 'Farmer' : 'User'} Details`}
+            title={`${selectedUser.role === 'farmer' ? 'Farmer' : selectedUser.role === 'buyer' ? 'Buyer' : 'User'} Details`}
           >
             <div className="space-y-4">
               <div className="p-4 bg-muted/50 rounded-xl">
@@ -265,7 +300,7 @@ const AdminUsers = () => {
                     <Users className="w-6 h-6 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground text-lg">{selectedUser.name}</h3>
+                    <h3 className="font-semibold text-foreground text-lg">{selectedUser.full_name}</h3>
                     <p className="text-sm text-muted-foreground capitalize">{selectedUser.role}</p>
                   </div>
                 </div>
@@ -277,18 +312,18 @@ const AdminUsers = () => {
                   </div>
                   <div className="flex items-center gap-3">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-foreground">{selectedUser.region}</span>
+                    <span className="text-sm text-foreground">{selectedUser.state || selectedUser.address || 'N/A'}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Shield className="w-4 h-4 text-muted-foreground" />
                     <span className="text-sm text-foreground capitalize">
                       KYC Status: <span className={`font-medium ${
-                        selectedUser.kycStatus === 'APPROVED' ? 'text-farm-success' :
-                        selectedUser.kycStatus === 'REJECTED' ? 'text-destructive' :
-                        selectedUser.kycStatus === 'IN_REVIEW' ? 'text-farm-info' :
+                        (selectedUser.role === 'buyer' ? (selectedUser.kyb_status || selectedUser.kyc_status) : selectedUser.kyc_status) === 'APPROVED' ? 'text-farm-success' :
+                        (selectedUser.role === 'buyer' ? (selectedUser.kyb_status || selectedUser.kyc_status) : selectedUser.kyc_status) === 'REJECTED' ? 'text-destructive' :
+                        (selectedUser.role === 'buyer' ? (selectedUser.kyb_status || selectedUser.kyc_status) : selectedUser.kyc_status) === 'IN_REVIEW' ? 'text-farm-info' :
                         'text-muted-foreground'
                       }`}>
-                        {selectedUser.kycStatus.replace('_', ' ')}
+                        {(selectedUser.role === 'buyer' ? (selectedUser.kyb_status || selectedUser.kyc_status) : selectedUser.kyc_status || 'NOT_STARTED').replace('_', ' ')}
                       </span>
                     </span>
                   </div>
@@ -296,10 +331,7 @@ const AdminUsers = () => {
               </div>
 
               {selectedUser.role === 'farmer' && (() => {
-                const listings = getListingsByFarmerId(selectedUser.id);
-                const orders = getOrdersByFarmerId(selectedUser.id);
-                const activeListings = listings.filter(l => l.status === 'Active').length;
-                const completedOrders = orders.filter(o => o.status === 'Delivered').length;
+                const stats = userStats[selectedUser.id] || { listings: 0, orders: 0 };
                 
                 return (
                   <div className="grid grid-cols-2 gap-4">
@@ -308,16 +340,14 @@ const AdminUsers = () => {
                         <Package className="w-5 h-5 text-primary" />
                         <span className="text-sm font-medium text-foreground">Listings</span>
                       </div>
-                      <p className="text-2xl font-bold text-foreground">{listings.length}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{activeListings} active</p>
+                      <p className="text-2xl font-bold text-foreground">{stats.listings}</p>
                     </div>
                     <div className="p-4 bg-farm-success/5 border border-farm-success/20 rounded-xl">
                       <div className="flex items-center gap-2 mb-2">
                         <ShoppingCart className="w-5 h-5 text-farm-success" />
                         <span className="text-sm font-medium text-foreground">Orders</span>
                       </div>
-                      <p className="text-2xl font-bold text-foreground">{orders.length}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{completedOrders} completed</p>
+                      <p className="text-2xl font-bold text-foreground">{stats.orders}</p>
                     </div>
                   </div>
                 );
@@ -340,6 +370,3 @@ const AdminUsers = () => {
 };
 
 export default AdminUsers;
-
-
-

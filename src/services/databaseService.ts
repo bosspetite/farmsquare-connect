@@ -605,24 +605,84 @@ export const releaseEscrow = async (orderId: string): Promise<boolean> => {
 // KYC / KYB
 // ════════════════════════════════════════════════════════════════════
 
+/** Get KYC documents for a user */
+export const getKycDocuments = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('kyc_documents')
+    .select('*')
+    .eq('user_id', userId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+  if (error) console.error('getKycDocuments error:', error.message);
+  return data || [];
+};
+
+/** Get KYB business info for a buyer */
+export const getBuyerBusiness = async (buyerId: string) => {
+  const { data, error } = await supabase
+    .from('buyer_businesses')
+    .select('*, buyer_business_reps(*)')
+    .eq('buyer_id', buyerId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) console.error('getBuyerBusiness error:', error.message);
+  return data;
+};
+
+/** Get KYB documents for a business */
+export const getKybDocuments = async (businessId: string) => {
+  const { data, error } = await supabase
+    .from('kyb_documents')
+    .select('*')
+    .eq('business_id', businessId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+  if (error) console.error('getKybDocuments error:', error.message);
+  return data || [];
+};
+
 /** Update KYC status on a profile */
 export const updateKycStatus = async (
   userId: string,
   status: string,
   rejectionReason?: string
 ): Promise<boolean> => {
+  const updateData: any = {
+    kyc_status: status,
+    updated_at: new Date().toISOString(),
+  };
+
+  // For buyers, also update kyb_status
+  const profile = await getProfile(userId);
+  if (profile?.role === 'buyer') {
+    updateData.kyb_status = status;
+  }
+
   const { error } = await supabase
     .from('profiles')
-    .update({
-      kyc_status: status,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', userId);
 
   if (error) {
     console.error('updateKycStatus error:', error.message);
     return false;
   }
+
+  // Update business status if buyer
+  if (profile?.role === 'buyer') {
+    const business = await getBuyerBusiness(userId);
+    if (business) {
+      await supabase
+        .from('buyer_businesses')
+        .update({
+          status,
+          rejection_reason: status === 'REJECTED' ? rejectionReason : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', business.id);
+    }
+  }
+
   return true;
 };
 

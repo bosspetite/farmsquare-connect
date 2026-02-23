@@ -1,24 +1,79 @@
 import { useNavigate } from 'react-router-dom';
-import { Users, Package, ShoppingCart, Truck, CreditCard, AlertTriangle, TrendingUp, Eye, Activity, Shield } from 'lucide-react';
-import { getAllDisputes } from '@/lib/store';
+import { Users, Package, ShoppingCart, Truck, CreditCard, AlertTriangle, TrendingUp, Eye, Activity, Shield, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { getAllProfiles, getAllOrders, getAllDisputes, getActiveListings } from '@/services/databaseService';
 import { AdminLayout } from '@/components/layouts/AdminLayout';
 import { StatCard } from '@/components/ui/StatCard';
-import { getAppState, formatNaira, formatTimeAgo } from '@/lib/store';
+import { formatNaira, formatTimeAgo } from '@/lib/store';
 import { getProduceImage } from '@/utils/produceImages';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const state = getAppState();
-  const totalTrades = (state.orders || []).filter(o => o.status === 'Delivered').length;
-  const totalVolume = (state.orders || []).filter(o => o.status === 'Delivered').reduce((sum, o) => sum + o.amount, 0);
-  const pendingKYC = (state.kycData || []).filter(k => k.status === 'IN_REVIEW');
-  const allDisputes = getAllDisputes();
-  const openDisputes = (allDisputes || []).filter(d => d.status === 'Open' || d.status === 'UnderReview');
-  
-  // Defensive checks for arrays
-  const farmers = state.farmers || [];
-  const buyers = state.buyers || [];
-  const listings = state.listings || [];
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalTrades: 0,
+    totalVolume: 0,
+    totalUsers: 0,
+    activeListings: 0,
+    pendingKYC: 0,
+    openDisputes: 0,
+  });
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [recentListings, setRecentListings] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const [profiles, orders, disputes, listings] = await Promise.all([
+          getAllProfiles(),
+          getAllOrders(),
+          getAllDisputes(),
+          getActiveListings(),
+        ]);
+
+        // Filter out admins
+        const nonAdminProfiles = profiles.filter(p => p.role !== 'admin');
+        const farmers = nonAdminProfiles.filter(p => p.role === 'farmer');
+        const buyers = nonAdminProfiles.filter(p => p.role === 'buyer');
+
+        const deliveredOrders = orders.filter(o => o.status === 'Delivered');
+        const totalVolume = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+        const pendingKYC = nonAdminProfiles.filter(p => {
+          const kycStatus = p.role === 'buyer' ? (p.kyb_status || p.kyc_status) : p.kyc_status;
+          return kycStatus === 'IN_REVIEW';
+        });
+        const openDisputes = disputes.filter(d => d.status === 'Open' || d.status === 'UnderReview');
+
+        setStats({
+          totalTrades: deliveredOrders.length,
+          totalVolume,
+          totalUsers: nonAdminProfiles.length,
+          activeListings: listings.length,
+          pendingKYC: pendingKYC.length,
+          openDisputes: openDisputes.length,
+        });
+
+        setRecentOrders(orders.slice(0, 5));
+        setRecentListings(listings.slice(0, 5));
+      } catch (err: any) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -26,14 +81,14 @@ const AdminDashboard = () => {
         <h1 className="text-xl font-display font-bold text-foreground">Admin Overview</h1>
 
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard icon={TrendingUp} label="Total Trades" value={totalTrades} />
-          <StatCard icon={CreditCard} label="Trade Volume" value={formatNaira(totalVolume)} />
-          <StatCard icon={Users} label="Total Users" value={farmers.length + buyers.length} />
-          <StatCard icon={Package} label="Active Listings" value={listings.filter(l => l.status === 'Active').length} />
+          <StatCard icon={TrendingUp} label="Total Trades" value={stats.totalTrades} />
+          <StatCard icon={CreditCard} label="Trade Volume" value={formatNaira(stats.totalVolume)} />
+          <StatCard icon={Users} label="Total Users" value={stats.totalUsers} />
+          <StatCard icon={Package} label="Active Listings" value={stats.activeListings} />
         </div>
 
         {/* Pending KYC Reviews Alert */}
-        {pendingKYC.length > 0 && (
+        {stats.pendingKYC > 0 && (
           <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -42,10 +97,10 @@ const AdminDashboard = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-foreground text-sm sm:text-base">
-                    {pendingKYC.length} KYC Verification{pendingKYC.length > 1 ? 's' : ''} Pending Review
+                    {stats.pendingKYC} KYC Verification{stats.pendingKYC > 1 ? 's' : ''} Pending Review
                   </p>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    {pendingKYC.length} user{pendingKYC.length > 1 ? 's' : ''} submitted documents awaiting your review
+                    {stats.pendingKYC} user{stats.pendingKYC > 1 ? 's' : ''} submitted documents awaiting your review
                   </p>
                 </div>
               </div>
@@ -61,7 +116,7 @@ const AdminDashboard = () => {
         )}
 
         {/* Open Disputes Alert */}
-        {openDisputes.length > 0 && (
+        {stats.openDisputes > 0 && (
           <div className="farm-card bg-destructive/10 border-destructive/20">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -70,10 +125,10 @@ const AdminDashboard = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-foreground text-sm sm:text-base">
-                    {openDisputes.length} Open Dispute{openDisputes.length > 1 ? 's' : ''} Requiring Attention
+                    {stats.openDisputes} Open Dispute{stats.openDisputes > 1 ? 's' : ''} Requiring Attention
                   </p>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    {openDisputes.length} dispute{openDisputes.length > 1 ? 's' : ''} need{openDisputes.length === 1 ? 's' : ''} your review and resolution
+                    {stats.openDisputes} dispute{stats.openDisputes > 1 ? 's' : ''} need{stats.openDisputes === 1 ? 's' : ''} your review and resolution
                   </p>
                 </div>
               </div>
@@ -90,7 +145,7 @@ const AdminDashboard = () => {
         )}
 
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Recent Listings from Farmers */}
+          {/* Recent Listings */}
           <div className="farm-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-semibold text-foreground">Recent Listings</h3>
@@ -102,47 +157,31 @@ const AdminDashboard = () => {
               </button>
             </div>
             <div className="space-y-3">
-              {state.listings.slice(0, 5).map((listing) => (
+              {recentListings.slice(0, 5).map((listing) => (
                 <div 
                   key={listing.id} 
-                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                  className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
                   onClick={() => navigate('/admin/listings')}
                 >
-                  <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                    <img 
-                      src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)} 
-                      alt={listing.commodity} 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = getProduceImage(listing.commodity);
-                      }}
-                    />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground text-sm">{listing.commodity}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {listing.farmerName} • {listing.quantityKg}kg • {formatNaira(listing.pricePerKg)}/kg
-                    </p>
+                    <p className="font-medium text-foreground text-sm">{listing.commodity} - Grade {listing.grade}</p>
+                    <p className="text-xs text-muted-foreground">{listing.farmer_name} • {listing.region}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatTimeAgo(listing.createdAt)}
+                      {formatTimeAgo(listing.created_at)}
                     </p>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    listing.status === 'Active' ? 'bg-farm-success/10 text-farm-success' :
-                    listing.status === 'Paused' ? 'bg-farm-warning/10 text-farm-warning' :
-                    'bg-muted text-muted-foreground'
-                  }`}>
-                    {listing.status}
-                  </span>
+                  <div className="text-right">
+                    <span className="text-sm font-medium text-primary">{formatNaira(listing.quantity_kg * listing.price_per_kg)}</span>
+                  </div>
                 </div>
               ))}
-              {(state.listings || []).length === 0 && (
+              {recentListings.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No listings yet</p>
               )}
             </div>
           </div>
 
-          {/* Recent Orders Activity */}
+          {/* Recent Orders */}
           <div className="farm-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-semibold text-foreground">Recent Orders</h3>
@@ -154,21 +193,18 @@ const AdminDashboard = () => {
               </button>
             </div>
             <div className="space-y-3">
-              {(state.orders || []).slice(0, 5).map((order) => (
+              {recentOrders.slice(0, 5).map((order) => (
                 <div 
                   key={order.id} 
                   className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
                   onClick={() => navigate('/admin/orders')}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground text-sm">{order.commodity} - {order.quantityKg}kg</p>
-                    <p className="text-xs text-muted-foreground">{order.farmerName} → {order.buyerName}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatTimeAgo(order.createdAt)}
-                    </p>
+                    <p className="font-medium text-foreground text-sm">Order #{order.id.slice(0, 8)}</p>
+                    <p className="text-xs text-muted-foreground">{formatTimeAgo(order.created_at)}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-sm font-medium text-primary">{formatNaira(order.amount)}</span>
+                    <span className="text-sm font-medium text-primary">{formatNaira(order.total_amount)}</span>
                     <p className={`text-xs mt-1 ${
                       order.status === 'Delivered' ? 'text-farm-success' :
                       order.status === 'Pending' ? 'text-farm-warning' :
@@ -179,66 +215,10 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               ))}
-              {(state.orders || []).length === 0 && (
+              {recentOrders.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No orders yet</p>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Farmer Activity Overview */}
-        <div className="farm-card">
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-5 h-5 text-primary" />
-            <h3 className="font-display font-semibold text-foreground">Farmer Activity Overview</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-muted/30 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Active Farmers</p>
-              <p className="text-2xl font-bold text-foreground">
-                {(state.farmers || []).filter(f => f.kycStatus === 'APPROVED').length}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                of {state.farmers.length} total farmers
-              </p>
-            </div>
-            <div className="p-4 bg-muted/30 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Total Listings Created</p>
-              <p className="text-2xl font-bold text-foreground">{(state.listings || []).length}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {(state.listings || []).filter(l => l.status === 'Active').length} currently active
-              </p>
-            </div>
-            <div className="p-4 bg-muted/30 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Orders from Farmers</p>
-              <p className="text-2xl font-bold text-foreground">{(state.orders || []).length}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {(state.orders || []).filter(o => o.status === 'Delivered').length} completed
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="farm-card">
-          <h3 className="font-display font-semibold text-foreground mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {[
-              { icon: Users, label: 'Manage Users', path: '/admin/users' },
-              { icon: Package, label: 'Review Listings', path: '/admin/listings' },
-              { icon: ShoppingCart, label: 'Order Oversight', path: '/admin/orders' },
-              { icon: AlertTriangle, label: 'Disputes', path: '/admin/disputes' },
-              { icon: Truck, label: 'Logistics', path: '/admin/logistics' },
-            ].map((action, i) => (
-              <button 
-                key={i} 
-                onClick={() => navigate(action.path)}
-                className="p-4 bg-muted/50 rounded-lg text-center hover:bg-muted transition-colors"
-              >
-                <action.icon className="w-6 h-6 text-primary mx-auto mb-2" />
-                <span className="text-sm font-medium text-foreground">{action.label}</span>
-              </button>
-            ))}
           </div>
         </div>
       </div>
