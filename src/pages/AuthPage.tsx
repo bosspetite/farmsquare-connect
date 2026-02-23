@@ -1,33 +1,229 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Tractor, ShoppingBag, Users, Shield, ArrowLeft, Phone, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Tractor, ShoppingBag, Users, Shield, ArrowLeft, Phone, Check, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
+import { signUp, signIn, validateEmail, validatePassword } from '@/services/authService';
 import logo from '@/assets/logo.png';
 
-type AuthStep = 'phone' | 'otp' | 'role' | 'profile';
+// TEMPORARY: Using email/password for all roles during development
+// TODO: Switch back to Phone OTP for Farmers/Buyers in production
+type AuthStep = 'signup' | 'login' | 'role' | 'profile';
 
-const roles = [
+// PRESERVED: Phone OTP steps for future restoration
+// type AuthStep = 'phone' | 'otp' | 'role' | 'profile';
+
+// Normal user roles (visible in onboarding)
+const normalRoles = [
   { id: 'farmer' as UserRole, icon: Tractor, label: 'Farmer', description: 'Sell your produce directly to buyers' },
   { id: 'buyer' as UserRole, icon: ShoppingBag, label: 'Buyer', description: 'Source quality produce from farms' },
+];
+
+// Admin/Agent roles (hidden from normal onboarding, accessible via direct routes only)
+const adminRoles = [
   { id: 'agent' as UserRole, icon: Users, label: 'Field Agent', description: 'Assist farmers with onboarding' },
   { id: 'admin' as UserRole, icon: Shield, label: 'Admin', description: 'Manage the platform' },
 ];
+
+const ONBOARDING_INTENT_KEY = 'farmsquare_onboarding_intent';
 
 const regions = ['Kaduna', 'Kano', 'Lagos', 'Oyo', 'Benue', 'Niger', 'Plateau', 'Nasarawa', 'Ekiti', 'Kogi', 'Kwara', 'Osun'];
 
 const AuthPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { login, user } = useAuth();
   
-  const [step, setStep] = useState<AuthStep>('phone');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  // Email/Password auth state
+  const [step, setStep] = useState<AuthStep>('login');
+  const [isSignup, setIsSignup] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Profile setup state
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [name, setName] = useState('');
   const [region, setRegion] = useState('');
+  const [onboardingIntent, setOnboardingIntent] = useState<UserRole | null>(null);
 
+  // PRESERVED: Phone OTP state (for future restoration)
+  // const [phone, setPhone] = useState('');
+  // const [otp, setOtp] = useState(['', '', '', '', '', '']);
+
+  // Read intent from URL and store it
+  useEffect(() => {
+    const intentParam = searchParams.get('intent');
+    if (intentParam === 'farmer' || intentParam === 'buyer') {
+      const intent = intentParam as UserRole;
+      setOnboardingIntent(intent);
+      sessionStorage.setItem(ONBOARDING_INTENT_KEY, intent);
+    } else {
+      // Check if intent was stored from previous step
+      const storedIntent = sessionStorage.getItem(ONBOARDING_INTENT_KEY);
+      if (storedIntent === 'farmer' || storedIntent === 'buyer') {
+        setOnboardingIntent(storedIntent as UserRole);
+      }
+    }
+  }, [searchParams]);
+
+  // Handle login with email/password
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      setError(emailValidation.message || 'Invalid email');
+      setLoading(false);
+      return;
+    }
+
+    // Validate password
+    if (!password) {
+      setError('Password is required');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { user: authUser, error: authError } = await signIn({ email, password });
+
+      if (authError || !authUser) {
+        setError(authError?.message || 'Invalid email or password');
+        setLoading(false);
+        return;
+      }
+
+      // Login successful - update auth context and redirect
+      login(authUser.role, authUser.fullName, authUser.region);
+
+      // Redirect to appropriate dashboard
+      switch (authUser.role) {
+        case 'farmer':
+          navigate('/farmer/dashboard');
+          break;
+        case 'buyer':
+          navigate('/buyer/dashboard');
+          break;
+        case 'agent':
+          navigate('/agent/dashboard');
+          break;
+        case 'admin':
+          navigate('/admin/dashboard');
+          break;
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle signup with email/password
+  const handleSignup = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      setError(emailValidation.message || 'Invalid email');
+      setLoading(false);
+      return;
+    }
+
+    // Validate password
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message || 'Invalid password');
+      setLoading(false);
+      return;
+    }
+
+    // Validate password confirmation
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    // Check if we have an intent (farmer/buyer) or need role selection
+    if (!selectedRole) {
+      // Need to select role first
+      if (onboardingIntent && (onboardingIntent === 'farmer' || onboardingIntent === 'buyer')) {
+        setSelectedRole(onboardingIntent);
+        setStep('profile');
+        setLoading(false);
+        return;
+      } else {
+        setStep('role');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // If we have role but no name/region, go to profile step
+    if (!name || !region) {
+      setStep('profile');
+      setLoading(false);
+      return;
+    }
+
+    // All data ready - create account
+    try {
+      const { user: authUser, error: authError } = await signUp({
+        email,
+        password,
+        fullName: name,
+        role: selectedRole,
+        region,
+      });
+
+      if (authError || !authUser) {
+        setError(authError?.message || 'Failed to create account');
+        setLoading(false);
+        return;
+      }
+
+      // Signup successful - login and redirect
+      login(authUser.role, authUser.fullName, authUser.region);
+
+      // Clear onboarding intent
+      sessionStorage.removeItem(ONBOARDING_INTENT_KEY);
+
+      // Redirect to appropriate dashboard
+      switch (authUser.role) {
+        case 'farmer':
+          navigate('/farmer/dashboard');
+          break;
+        case 'buyer':
+          navigate('/buyer/dashboard');
+          break;
+        case 'agent':
+          navigate('/agent/dashboard');
+          break;
+        case 'admin':
+          navigate('/admin/dashboard');
+          break;
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during signup');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // PRESERVED: Phone OTP handlers (for future restoration)
+  /*
   const handlePhoneSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.length >= 10) {
@@ -52,50 +248,121 @@ const AuthPage = () => {
   const handleOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.every(d => d !== '')) {
-      setStep('role');
+      // Check if user already exists with this phone
+      const state = getAppState();
+      const existingUser = [...state.farmers, ...state.buyers, ...state.agents, ...state.admins]
+        .find(u => u.phone === `+234${phone}`);
+      
+      if (existingUser) {
+        // User exists - login and redirect to their dashboard
+        login(existingUser.role, existingUser.name, existingUser.region);
+        
+        switch (existingUser.role) {
+          case 'farmer':
+            navigate('/farmer/dashboard');
+            break;
+          case 'buyer':
+            navigate('/buyer/dashboard');
+            break;
+          case 'agent':
+            navigate('/agent/dashboard');
+            break;
+          case 'admin':
+            navigate('/admin/dashboard');
+            break;
+        }
+        return;
+      }
+
+      // New user - check if we have an intent
+      if (onboardingIntent && (onboardingIntent === 'farmer' || onboardingIntent === 'buyer')) {
+        // Skip role selection, go directly to profile setup
+        setSelectedRole(onboardingIntent);
+        setStep('profile');
+      } else {
+        // No intent - show role selection
+        setStep('role');
+      }
     }
   };
+  */
 
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
     setStep('profile');
   };
 
-  const handleProfileSubmit = (e: React.FormEvent) => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (name && region && selectedRole) {
-      login(selectedRole, name, region);
-      
-      // Navigate to appropriate dashboard
-      switch (selectedRole) {
-        case 'farmer':
-          navigate('/farmer/dashboard');
-          break;
-        case 'buyer':
-          navigate('/buyer/dashboard');
-          break;
-        case 'agent':
-          navigate('/agent/dashboard');
-          break;
-        case 'admin':
-          navigate('/admin/dashboard');
-          break;
+    if (!name || !region || !selectedRole) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    // If we're in signup flow, complete the signup
+    if (isSignup && email && password) {
+      // Validate password confirmation if we're completing signup
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        return;
       }
+      await handleSignup();
+      return;
+    }
+
+    // Otherwise, just update profile (for existing users - fallback)
+    login(selectedRole, name, region);
+    
+    // Clear onboarding intent after successful setup
+    sessionStorage.removeItem(ONBOARDING_INTENT_KEY);
+    
+    // Navigate to appropriate dashboard
+    switch (selectedRole) {
+      case 'farmer':
+        navigate('/farmer/dashboard');
+        break;
+      case 'buyer':
+        navigate('/buyer/dashboard');
+        break;
+      case 'agent':
+        navigate('/agent/dashboard');
+        break;
+      case 'admin':
+        navigate('/admin/dashboard');
+        break;
     }
   };
 
   const goBack = () => {
     switch (step) {
-      case 'otp':
-        setStep('phone');
-        break;
       case 'role':
-        setStep('otp');
+        setStep(isSignup ? 'signup' : 'login');
         break;
       case 'profile':
+        if (isSignup && selectedRole) {
+          setStep('role');
+        } else {
         setStep('role');
+        }
+        break;
+      default:
+        // Reset to login
+        setStep('login');
+        setIsSignup(false);
         break;
     }
+  };
+
+  const switchToSignup = () => {
+    setIsSignup(true);
+    setStep('signup');
+    setError(null);
+  };
+
+  const switchToLogin = () => {
+    setIsSignup(false);
+    setStep('login');
+    setError(null);
   };
 
   return (
@@ -103,7 +370,7 @@ const AuthPage = () => {
       {/* Header */}
       <header className="p-4">
         <div className="flex items-center gap-3">
-          {step !== 'phone' && (
+          {step !== 'login' && step !== 'signup' && (
             <button onClick={goBack} className="w-10 h-10 rounded-xl bg-card flex items-center justify-center">
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
@@ -115,7 +382,209 @@ const AuthPage = () => {
 
       <main className="flex-1 flex flex-col justify-center px-4 pb-8">
         <div className="w-full max-w-md mx-auto">
-          {/* Phone Step */}
+          {/* Login Step */}
+          {step === 'login' && (
+            <div className="animate-fade-up">
+              <h1 className="text-2xl font-display font-bold text-foreground mb-2">
+                Welcome back
+              </h1>
+              <p className="text-muted-foreground mb-8">
+                Sign in to your FarmSquare account
+              </p>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Email
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full pl-12 pr-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      className="w-full pl-12 pr-12 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
+                      required
+                      disabled={loading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+                
+                <button
+                  type="submit"
+                  disabled={loading || !email || !password}
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] min-h-[52px]"
+                >
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </button>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={switchToSignup}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Sign up
+                  </button>
+                </p>
+              </form>
+            </div>
+          )}
+
+          {/* Signup Step */}
+          {step === 'signup' && (
+            <div className="animate-fade-up">
+              <h1 className="text-2xl font-display font-bold text-foreground mb-2">
+                Create your account
+              </h1>
+              <p className="text-muted-foreground mb-8">
+                Get started with FarmSquare
+              </p>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSignup} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Email
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full pl-12 pr-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      className="w-full pl-12 pr-12 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
+                      required
+                      disabled={loading}
+                      minLength={8}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Must be at least 8 characters</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your password"
+                      className="w-full pl-12 pr-12 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
+                      required
+                      disabled={loading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+                
+                <button
+                  type="submit"
+                  disabled={loading || !email || !password || !confirmPassword}
+                  className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] min-h-[52px]"
+                >
+                  {loading ? 'Creating account...' : 'Continue'}
+                </button>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={switchToLogin}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Sign in
+                  </button>
+                </p>
+              </form>
+            </div>
+          )}
+
+          {/* PRESERVED: Phone OTP Steps (for future restoration) */}
+          {/*
           {step === 'phone' && (
             <div className="animate-fade-up">
               <h1 className="text-2xl font-display font-bold text-foreground mb-2">
@@ -152,7 +621,6 @@ const AuthPage = () => {
             </div>
           )}
 
-          {/* OTP Step */}
           {step === 'otp' && (
             <div className="animate-fade-up">
               <h1 className="text-2xl font-display font-bold text-foreground mb-2">
@@ -195,8 +663,9 @@ const AuthPage = () => {
               </form>
             </div>
           )}
+          */}
 
-          {/* Role Selection Step */}
+          {/* Role Selection Step - Only show Farmer and Buyer in normal flow */}
           {step === 'role' && (
             <div className="animate-fade-up">
               <h1 className="text-2xl font-display font-bold text-foreground mb-2">
@@ -207,7 +676,8 @@ const AuthPage = () => {
               </p>
               
               <div className="space-y-3">
-                {roles.map((role) => (
+                {/* Only show Farmer and Buyer in normal onboarding */}
+                {normalRoles.map((role) => (
                   <button
                     key={role.id}
                     onClick={() => handleRoleSelect(role.id)}

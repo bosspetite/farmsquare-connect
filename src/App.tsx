@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { RouteGuard } from "@/components/RouteGuard";
 
 // Public pages
 import { LandingPageWithIntro } from "./components/LandingPageWithIntro";
@@ -105,26 +106,94 @@ const App = () => (
               <Route path="/buyer/reports" element={<BuyerReports />} />
               <Route path="/buyer/profile" element={<BuyerProfile />} />
               
-              {/* Agent */}
-              <Route path="/agent/dashboard" element={<AgentDashboard />} />
-              <Route path="/agent/farmers" element={<AgentFarmers />} />
-              <Route path="/agent/inspections" element={<AgentInspections />} />
-              <Route path="/agent/inspections/:orderId" element={<AgentInspectionDetail />} />
-              <Route path="/agent/deliveries" element={<AgentDeliveries />} />
-              <Route path="/agent/reports" element={<AgentReports />} />
-              <Route path="/agent/profile" element={<AgentProfile />} />
+              {/* Agent - Protected Routes */}
+              <Route path="/agent/dashboard" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentDashboard />
+                </RouteGuard>
+              } />
+              <Route path="/agent/farmers" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentFarmers />
+                </RouteGuard>
+              } />
+              <Route path="/agent/inspections" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentInspections />
+                </RouteGuard>
+              } />
+              <Route path="/agent/inspections/:orderId" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentInspectionDetail />
+                </RouteGuard>
+              } />
+              <Route path="/agent/deliveries" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentDeliveries />
+                </RouteGuard>
+              } />
+              <Route path="/agent/reports" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentReports />
+                </RouteGuard>
+              } />
+              <Route path="/agent/profile" element={
+                <RouteGuard allowedRoles={['agent']} routeType="agent">
+                  <AgentProfile />
+                </RouteGuard>
+              } />
               
-              {/* Admin */}
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/users" element={<AdminUsers />} />
-              <Route path="/admin/users/:userId/kyc" element={<AdminKYCReview />} />
-              <Route path="/admin/listings" element={<AdminListings />} />
-              <Route path="/admin/orders" element={<AdminOrders />} />
-              <Route path="/admin/logistics" element={<AdminLogistics />} />
-              <Route path="/admin/payments" element={<AdminPayments />} />
-              <Route path="/admin/reports" element={<AdminReports />} />
-              <Route path="/admin/disputes" element={<AdminDisputes />} />
-              <Route path="/admin/profile" element={<AdminProfile />} />
+              {/* Admin - Protected Routes */}
+              <Route path="/admin/dashboard" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminDashboard />
+                </RouteGuard>
+              } />
+              <Route path="/admin/users" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminUsers />
+                </RouteGuard>
+              } />
+              <Route path="/admin/users/:userId/kyc" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminKYCReview />
+                </RouteGuard>
+              } />
+              <Route path="/admin/listings" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminListings />
+                </RouteGuard>
+              } />
+              <Route path="/admin/orders" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminOrders />
+                </RouteGuard>
+              } />
+              <Route path="/admin/logistics" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminLogistics />
+                </RouteGuard>
+              } />
+              <Route path="/admin/payments" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminPayments />
+                </RouteGuard>
+              } />
+              <Route path="/admin/reports" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminReports />
+                </RouteGuard>
+              } />
+              <Route path="/admin/disputes" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminDisputes />
+                </RouteGuard>
+              } />
+              <Route path="/admin/profile" element={
+                <RouteGuard allowedRoles={['admin']} routeType="admin">
+                  <AdminProfile />
+                </RouteGuard>
+              } />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

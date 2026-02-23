@@ -5,16 +5,33 @@
 Create a `.env` file in the root directory (`farmsquare-connect/.env`) with the following variables:
 
 ```env
-# Google Maps API Key
+# ============================================
+# Supabase Configuration (REQUIRED)
+# ============================================
+# Get these from: https://app.supabase.com/project/_/settings/api
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+
+# ============================================
+# Google Maps API Key (REQUIRED for delivery tracking)
+# ============================================
 # Get your API key from: https://console.cloud.google.com/
 # Enable: Maps JavaScript API and Directions API
 VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
 
-# Paystack Public Key
+# ============================================
+# Paystack Configuration (REQUIRED for payments)
+# ============================================
 # Get your public key from: https://dashboard.paystack.com/#/settings/developer
 # Use pk_test_... for test mode or pk_live_... for production
 VITE_PAYSTACK_PUBLIC_KEY=pk_test_your_paystack_public_key_here
 ```
+
+## Edge Functions Environment Variables
+
+For Edge Functions, set these in Supabase Dashboard > Edge Functions > Settings:
+- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (keep secret!)
+- `PAYSTACK_SECRET_KEY` - Your Paystack secret key for webhook verification
 
 ## Setup Instructions
 
@@ -48,6 +65,9 @@ After setting up your environment variables:
 1. Restart the development server: `npm run dev`
 2. Test the payment gateway by placing an order
 3. Test Google Maps by viewing delivery tracking
+
+
+
 
 
 

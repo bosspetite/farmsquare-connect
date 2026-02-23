@@ -47,8 +47,17 @@ export const StatCard: React.FC<StatCardProps> = ({
           </span>
         )}
       </div>
-      <p className="text-2xl font-display font-bold text-foreground mb-1">{value}</p>
-      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-xl sm:text-2xl font-display font-bold text-foreground mb-1 leading-tight break-words">
+        {typeof value === 'string' && value.includes('₦') ? (
+          // Break money amounts into two lines on mobile
+          value.split(' ').map((part, i) => (
+            <span key={i} className="block sm:inline">{part}</span>
+          ))
+        ) : (
+          value
+        )}
+      </p>
+      <p className="text-xs sm:text-sm text-muted-foreground">{label}</p>
     </div>
   );
 };

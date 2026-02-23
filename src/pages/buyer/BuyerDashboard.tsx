@@ -154,7 +154,7 @@ const BuyerDashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
           <StatCard
             icon={ShoppingCart}
             label="Active Orders"
@@ -189,18 +189,30 @@ const BuyerDashboard = () => {
                 View Details
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <div className="text-center">
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Available</p>
-                <p className="text-xl sm:text-2xl font-bold text-foreground">{formatNaira(buyerWallet.available)}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold text-foreground leading-tight break-words">
+                  {formatNaira(buyerWallet.available).split(' ').map((part, i) => (
+                    <span key={i} className="block sm:inline">{part}</span>
+                  ))}
+                </p>
               </div>
-              <div>
+              <div className="text-center">
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">In Escrow</p>
-                <p className="text-xl sm:text-2xl font-bold text-farm-warning">{formatNaira(buyerWallet.pending)}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold text-farm-warning leading-tight break-words">
+                  {formatNaira(buyerWallet.pending).split(' ').map((part, i) => (
+                    <span key={i} className="block sm:inline">{part}</span>
+                  ))}
+                </p>
               </div>
-              <div>
+              <div className="text-center">
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Total</p>
-                <p className="text-xl sm:text-2xl font-bold text-primary">{formatNaira(buyerWallet.available + buyerWallet.pending)}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold text-primary leading-tight break-words">
+                  {formatNaira(buyerWallet.available + buyerWallet.pending).split(' ').map((part, i) => (
+                    <span key={i} className="block sm:inline">{part}</span>
+                  ))}
+                </p>
               </div>
             </div>
           </div>
@@ -220,7 +232,7 @@ const BuyerDashboard = () => {
               View All
             </button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
             {[
               { name: 'Maize', grade: 'A' as const },
               { name: 'Cassava', grade: 'B' as const },
@@ -291,7 +303,7 @@ const BuyerDashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 md:gap-4">
           <button
             onClick={() => navigate('/buyer/marketplace')}
             className="farm-card p-6 text-center hover:border-primary/20 hover:shadow-md transition-all cursor-pointer bg-gradient-to-br from-primary/5 to-transparent border-2 border-primary/20"
@@ -327,8 +339,8 @@ const BuyerDashboard = () => {
         {/* Recent Orders */}
         <div className="farm-card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-semibold text-foreground">Recent Orders</h3>
-            <button onClick={() => navigate('/buyer/orders')} className="text-sm text-primary font-medium">
+            <h3 className="font-display font-semibold text-foreground text-sm sm:text-base">Recent Orders</h3>
+            <button onClick={() => navigate('/buyer/orders')} className="text-xs sm:text-sm text-primary font-medium">
               View all
             </button>
           </div>
@@ -352,9 +364,9 @@ const BuyerDashboard = () => {
                   <div
                     key={order.id}
                     onClick={() => navigate(`/buyer/orders/${order.id}`)}
-                    className="flex items-center gap-4 p-4 bg-white dark:bg-card border border-border rounded-xl hover:border-primary/20 hover:shadow-md transition-all cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 bg-white dark:bg-card border border-border rounded-xl hover:border-primary/20 hover:shadow-md transition-all cursor-pointer"
                   >
-                    <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       <img 
                         src={listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(order.commodity)} 
                         alt={order.commodity} 
@@ -365,15 +377,19 @@ const BuyerDashboard = () => {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-sm sm:text-base text-foreground">{order.commodity}</span>
-                        <span className="text-sm sm:text-base text-muted-foreground">• {order.quantityKg}kg</span>
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-semibold text-xs sm:text-sm md:text-base text-foreground">{order.commodity}</span>
+                        <span className="text-xs sm:text-sm md:text-base text-muted-foreground">• {order.quantityKg}kg</span>
                       </div>
-                      <p className="text-sm sm:text-base text-muted-foreground mb-1">{order.farmerName}</p>
-                      <p className="text-xs sm:text-sm text-muted-foreground">{formatTimeAgo(order.createdAt)}</p>
+                      <p className="text-xs sm:text-sm md:text-base text-muted-foreground mb-1 truncate">{order.farmerName}</p>
+                      <p className="text-xs text-muted-foreground">{formatTimeAgo(order.createdAt)}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="font-semibold text-foreground mb-2">{formatNaira(order.amount)}</p>
+                      <p className="font-semibold text-foreground mb-2 text-xs sm:text-sm md:text-base leading-tight">
+                        {formatNaira(order.amount).split(' ').map((part, i) => (
+                          <span key={i} className="block sm:inline">{part}</span>
+                        ))}
+                      </p>
                       <StatusPill status={order.status} />
                     </div>
                   </div>
@@ -385,8 +401,8 @@ const BuyerDashboard = () => {
 
         {/* Quality Summary */}
         <div className="farm-card">
-          <h3 className="font-display font-semibold text-foreground mb-4">Quality Overview</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <h3 className="font-display font-semibold text-foreground mb-4 text-sm sm:text-base">Quality Overview</h3>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4">
             {['A', 'B', 'C'].map((grade) => {
               const count = deliveredOrders.filter(o => 
                 (state.listings || []).find(l => l.id === o.listingId)?.grade === grade

@@ -175,14 +175,14 @@ const LandingPage = () => {
               {/* CTA Buttons - Centered */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link
-                  to="/auth"
+                  to="/auth?intent=farmer"
                   className="w-full sm:w-auto px-8 py-4 bg-[#22C55E] text-white rounded-xl text-base font-semibold hover:bg-[#16A34A] transition-all flex items-center justify-center gap-2 shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
                 >
                   Start Selling
                   <ArrowRight className="w-5 h-5" />
                 </Link>
                 <Link
-                  to="/auth"
+                  to="/auth?intent=buyer"
                   className="w-full sm:w-auto px-8 py-4 bg-white/95 backdrop-blur-sm border-2 border-white/30 text-gray-900 rounded-xl text-base font-semibold hover:bg-white transition-all flex items-center justify-center gap-2 shadow-xl hover:shadow-2xl"
                 >
                   Buy Produce
@@ -552,7 +552,7 @@ const LandingPage = () => {
               {/* Enhanced CTA Buttons */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
                 <Link
-                  to="/auth"
+                  to="/auth?intent=farmer"
                   className="group relative inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white rounded-xl text-lg font-bold hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center gap-2">
@@ -563,7 +563,7 @@ const LandingPage = () => {
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                 </Link>
                 <Link
-                  to="/auth"
+                  to="/auth?intent=buyer"
                   className="group relative inline-flex items-center gap-3 px-10 py-5 bg-white border-3 border-[#22C55E] text-[#166534] rounded-xl text-lg font-bold hover:bg-[#F0FDF4] transition-all duration-300 transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
                 >
                   <span className="relative z-10 flex items-center gap-2">
@@ -678,7 +678,7 @@ const LandingPage = () => {
               </span>
             </div>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
-              Partners
+              Our Partners
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
               Working with trusted partners to build a stronger agricultural supply chain
@@ -687,33 +687,105 @@ const LandingPage = () => {
           
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6 max-w-6xl mx-auto">
             {[
-              { name: 'Partner Logo', icon: '🏢' },
-              { name: 'Agro Co-op', icon: '🌾' },
-              { name: 'Logistics Partner', icon: '🚚' },
-              { name: 'Quality Assurance', icon: '✅' },
-              { name: 'Payments Partner', icon: '💳' },
-              { name: 'Farm Inputs', icon: '🌱' },
+              { 
+                name: 'Paystack', 
+                logo: (
+                  <svg viewBox="0 0 200 60" className="w-full h-12">
+                    <rect width="200" height="60" rx="8" fill="#00A8FF"/>
+                    <text x="100" y="35" fontSize="24" fontWeight="bold" fill="white" textAnchor="middle" fontFamily="Arial, sans-serif">Paystack</text>
+                  </svg>
+                ),
+                category: 'Payments'
+              },
+              { 
+                name: 'AgroCo Nigeria', 
+                logo: (
+                  <div className="w-full h-12 flex items-center justify-center bg-gradient-to-r from-[#22C55E] to-[#16A34A] rounded-lg">
+                    <span className="text-white font-bold text-lg">AgroCo</span>
+                  </div>
+                ),
+                category: 'Agricultural Co-op'
+              },
+              { 
+                name: 'Swift Logistics', 
+                logo: (
+                  <div className="w-full h-12 flex items-center justify-center bg-gradient-to-r from-[#3B82F6] to-[#2563EB] rounded-lg">
+                    <Truck className="w-6 h-6 text-white mr-2" />
+                    <span className="text-white font-bold text-sm">Swift</span>
+                  </div>
+                ),
+                category: 'Logistics'
+              },
+              { 
+                name: 'QualityCert', 
+                logo: (
+                  <div className="w-full h-12 flex items-center justify-center bg-gradient-to-r from-[#F59E0B] to-[#D97706] rounded-lg">
+                    <Shield className="w-6 h-6 text-white mr-2" />
+                    <span className="text-white font-bold text-sm">QCert</span>
+                  </div>
+                ),
+                category: 'Quality Assurance'
+              },
+              { 
+                name: 'FarmInputs Pro', 
+                logo: (
+                  <div className="w-full h-12 flex items-center justify-center bg-gradient-to-r from-[#10B981] to-[#059669] rounded-lg">
+                    <Package className="w-6 h-6 text-white mr-2" />
+                    <span className="text-white font-bold text-xs">FarmInputs</span>
+                  </div>
+                ),
+                category: 'Farm Supplies'
+              },
+              { 
+                name: 'Nigerian Farmers Union', 
+                logo: (
+                  <div className="w-full h-12 flex items-center justify-center bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] rounded-lg">
+                    <Users className="w-6 h-6 text-white mr-2" />
+                    <span className="text-white font-bold text-xs">NFU</span>
+                  </div>
+                ),
+                category: 'Farmers Union'
+              },
             ].map((partner, i) => (
               <div
                 key={i}
-                className="group bg-gradient-to-br from-white to-[#FAFAFA] rounded-2xl p-6 md:p-8 border-2 border-gray-200 hover:border-[#22C55E] hover:shadow-xl transition-all duration-300 flex flex-col items-center justify-center min-h-[140px] text-center transform hover:-translate-y-1 relative overflow-hidden"
+                className="group bg-white rounded-xl p-4 md:p-6 border-2 border-gray-200 hover:border-[#22C55E] hover:shadow-xl transition-all duration-300 flex flex-col items-center justify-center min-h-[120px] md:min-h-[140px] text-center transform hover:-translate-y-1 relative overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-[#22C55E]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative z-10">
-                  <div className="text-3xl md:text-4xl mb-3 transform group-hover:scale-110 transition-transform duration-300">
-                    {partner.icon}
+                <div className="relative z-10 w-full">
+                  <div className="mb-3 transform group-hover:scale-105 transition-transform duration-300">
+                    {partner.logo}
                   </div>
-                  <p className="text-xs md:text-sm font-semibold text-gray-700 group-hover:text-[#166534] transition-colors duration-300">
+                  <p className="text-xs md:text-sm font-semibold text-gray-700 group-hover:text-[#166534] transition-colors duration-300 mb-1">
                     {partner.name}
+                  </p>
+                  <p className="text-[10px] md:text-xs text-gray-500">
+                    {partner.category}
                   </p>
                 </div>
               </div>
             ))}
           </div>
           
-          <p className="text-center text-xs text-gray-500 mt-8 italic">
-            Partner logos are placeholders and will be updated.
-          </p>
+          <div className="mt-12 text-center">
+            <p className="text-sm text-gray-600 mb-4">
+              Trusted by leading agricultural organizations across Nigeria
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8 opacity-60">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-[#22C55E]" />
+                <span className="text-sm text-gray-600">Verified Partners</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-[#22C55E]" />
+                <span className="text-sm text-gray-600">Secure Transactions</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-[#22C55E]" />
+                <span className="text-sm text-gray-600">Growing Network</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

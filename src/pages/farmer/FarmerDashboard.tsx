@@ -301,7 +301,7 @@ const FarmerDashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
           <StatCard
             icon={Package}
             label="Active Listings"
@@ -327,7 +327,7 @@ const FarmerDashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {[
             { icon: Package, label: 'Inventory', path: '/farmer/listings' },
             { icon: ShoppingCart, label: 'Orders', path: '/farmer/orders' },
@@ -371,34 +371,34 @@ const FarmerDashboard = () => {
         {userListing && marketPrice && (
           <div className="farm-card">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Market Price Intel</h3>
+              <h3 className="text-xs sm:text-sm font-medium text-muted-foreground">Market Price Intel</h3>
               <button
                 onClick={() => setShowPriceInfoModal(true)}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                className="p-2 hover:bg-muted rounded-lg transition-colors flex-shrink-0"
                 title="View Price Information"
               >
                 <Info className="w-4 h-4 text-muted-foreground hover:text-primary transition-colors" />
               </button>
             </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{userListing.commodity}</p>
-                <p className="text-lg font-semibold text-foreground">
-                  Your price: {formatNaira(userListing.pricePerKg)}/kg
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-muted-foreground">{userListing.commodity}</p>
+                <p className="text-base sm:text-lg font-semibold text-foreground leading-tight">
+                  Your price: <span className="break-words">{formatNaira(userListing.pricePerKg)}/kg</span>
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  Regional avg: {formatNaira(marketPrice.regionalPricePerKg)}/kg
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Regional avg: <span className="break-words">{formatNaira(marketPrice.regionalPricePerKg)}/kg</span>
                 </p>
               </div>
-              <div className={`flex items-center gap-1 px-3 py-2 rounded-xl ${
+              <div className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl flex-shrink-0 ${
                 priceDiff > 0 ? 'bg-farm-success/10 text-farm-success' : 
                 priceDiff < 0 ? 'bg-destructive/10 text-destructive' : 
                 'bg-muted text-muted-foreground'
               }`}>
-                {priceDiff > 0 ? <TrendingUp className="w-4 h-4" /> : 
-                 priceDiff < 0 ? <TrendingDown className="w-4 h-4" /> : 
-                 <Minus className="w-4 h-4" />}
-                <span className="text-sm font-medium">
+                {priceDiff > 0 ? <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" /> : 
+                 priceDiff < 0 ? <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4" /> : 
+                 <Minus className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">
                   {priceDiff > 0 ? '+' : ''}{formatNaira(priceDiff)}
                 </span>
               </div>
@@ -490,19 +490,19 @@ const FarmerDashboard = () => {
         {activeListings > 0 && (
           <div className="farm-card">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-semibold text-foreground">Active Listings</h3>
-              <button onClick={() => navigate('/farmer/listings')} className="text-sm text-primary">
+              <h3 className="font-display font-semibold text-foreground text-sm sm:text-base">Active Listings</h3>
+              <button onClick={() => navigate('/farmer/listings')} className="text-xs sm:text-sm text-primary">
                 View all
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {listings.filter(l => l.status === 'Active').slice(0, 3).map((listing) => (
                 <div
                   key={listing.id}
                   onClick={() => navigate('/farmer/listings')}
-                  className="flex gap-3 p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                  className="flex gap-2 sm:gap-3 p-2 sm:p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
                 >
-                  <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
                     <img 
                       src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)} 
                       alt={listing.commodity} 
@@ -512,9 +512,9 @@ const FarmerDashboard = () => {
                       }}
                     />
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground">{listing.commodity}</p>
-                    <p className="text-sm text-muted-foreground">{listing.quantityKg}kg · {formatNaira(listing.pricePerKg)}/kg</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground text-sm sm:text-base">{listing.commodity}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground break-words">{listing.quantityKg}kg · {formatNaira(listing.pricePerKg)}/kg</p>
                   </div>
                 </div>
               ))}
@@ -525,8 +525,8 @@ const FarmerDashboard = () => {
         {/* Recent Orders */}
         <div className="farm-card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-semibold text-foreground">Recent Orders</h3>
-            <button onClick={() => navigate('/farmer/orders')} className="text-sm text-primary">
+            <h3 className="font-display font-semibold text-foreground text-sm sm:text-base">Recent Orders</h3>
+            <button onClick={() => navigate('/farmer/orders')} className="text-xs sm:text-sm text-primary">
               View all
             </button>
           </div>
@@ -539,20 +539,24 @@ const FarmerDashboard = () => {
                 <div
                   key={order.id}
                   onClick={() => navigate(`/farmer/orders/${order.id}`)}
-                  className="flex items-center justify-between p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
+                  className="flex items-center justify-between gap-2 sm:gap-3 p-3 bg-muted/50 rounded-xl cursor-pointer hover:bg-muted transition-colors"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-foreground">{order.commodity}</span>
-                      <span className="text-sm text-muted-foreground">• {order.quantityKg}kg</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-medium text-foreground text-sm sm:text-base">{order.commodity}</span>
+                      <span className="text-xs sm:text-sm text-muted-foreground">• {order.quantityKg}kg</span>
                     </div>
-                    <p className="text-sm text-muted-foreground">{order.buyerName}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{order.buyerName}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-foreground">{formatNaira(order.amount)}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-semibold text-foreground text-xs sm:text-sm md:text-base leading-tight">
+                      {formatNaira(order.amount).split(' ').map((part, i) => (
+                        <span key={i} className="block sm:inline">{part}</span>
+                      ))}
+                    </p>
+                    <div className="flex items-center gap-1 sm:gap-2 mt-1 justify-end flex-wrap">
                       <StatusPill status={order.status} />
-                      <span className="text-xs text-muted-foreground">{formatTimeAgo(order.createdAt)}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">{formatTimeAgo(order.createdAt)}</span>
                     </div>
                   </div>
                 </div>
