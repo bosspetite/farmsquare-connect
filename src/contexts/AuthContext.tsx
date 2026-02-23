@@ -1,7 +1,40 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, UserRole } from '@/types';
 import { getAppState, setAppState } from '@/lib/store';
-import { getCurrentUser, onAuthStateChange, signOut as authSignOut, AuthUser } from '@/services/authService';
+
+// ── Import BOTH auth services ──────────────────────────────────────
+// Supabase (real) – used when Supabase env vars are set
+import {
+  getCurrentUser as supabaseGetCurrentUser,
+  onAuthStateChange as supabaseOnAuthStateChange,
+  signOut as supabaseSignOut,
+  AuthUser,
+} from '@/services/supabaseAuthService';
+
+// localStorage (mock) – fallback when Supabase is not configured
+import {
+  getCurrentUser as mockGetCurrentUser,
+  onAuthStateChange as mockOnAuthStateChange,
+  signOut as mockSignOut,
+} from '@/services/authService';
+
+// ── Detect which backend to use ────────────────────────────────────
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const useSupabase = Boolean(SUPABASE_URL && SUPABASE_KEY);
+
+// Unified wrappers
+const getCurrentUser = useSupabase ? supabaseGetCurrentUser : mockGetCurrentUser;
+const onAuthStateChange = useSupabase ? supabaseOnAuthStateChange : mockOnAuthStateChange;
+const performSignOut = useSupabase ? supabaseSignOut : mockSignOut;
+
+if (useSupabase) {
+  console.log('🟢 AuthContext: Using Supabase Auth');
+} else {
+  console.log('🟡 AuthContext: Using localStorage mock auth (set VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY to enable Supabase)');
+}
+
+// ── Context type ───────────────────────────────────────────────────
 
 interface AuthContextType {
   user: User | null;
@@ -12,67 +45,59 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ── Provider ───────────────────────────────────────────────────────
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Convert AuthUser to User type
-  const convertAuthUserToUser = (authUser: AuthUser): User => {
-    return {
-      id: authUser.id,
-      name: authUser.fullName,
-      phone: authUser.phone || '+2340000000000', // Default phone for email-based auth
-      role: authUser.role,
-      region: authUser.region,
-      kycStatus: authUser.role === 'admin' ? 'APPROVED' : 'NOT_STARTED',
-      createdAt: new Date().toISOString(),
-    };
-  };
+  /** Map an AuthUser (from either service) → frontend User */
+  const toUser = (au: AuthUser): User => ({
+    id: au.id,
+    name: au.fullName,
+    phone: au.phone || '+2340000000000',
+    role: au.role,
+    region: au.region,
+    kycStatus: (au as any).kycStatus ?? (au.role === 'admin' ? 'APPROVED' : 'NOT_STARTED'),
+    createdAt: new Date().toISOString(),
+  });
 
-  // Initialize auth state from localStorage/store
+  // ── Bootstrap ──────────────────────────────────────────────────
+
   useEffect(() => {
-    const initializeAuth = async () => {
+    const init = async () => {
       try {
-        const { user: authUser, error } = await getCurrentUser();
-        
-        if (!error && authUser) {
-          const userData = convertAuthUserToUser(authUser);
-          setUser(userData);
-          
-          // Sync with local store
+        const { user: authUser } = await getCurrentUser();
+        if (authUser) {
+          const u = toUser(authUser);
+          setUser(u);
+          // Keep localStorage in sync (so legacy pages still work)
           const state = getAppState();
-          state.currentUser = userData;
+          state.currentUser = u;
           setAppState(state);
         } else {
-          // Fallback to localStorage if no auth user found
+          // Fall back to any user stored in localStorage
           const state = getAppState();
-          if (state.currentUser) {
-            setUser(state.currentUser);
-          }
+          if (state.currentUser) setUser(state.currentUser);
         }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-        // Fallback to localStorage
+      } catch (err) {
+        console.error('Auth init error:', err);
         const state = getAppState();
-        if (state.currentUser) {
-          setUser(state.currentUser);
-        }
+        if (state.currentUser) setUser(state.currentUser);
       } finally {
         setIsLoading(false);
       }
     };
 
-    initializeAuth();
+    init();
 
-    // Listen to auth state changes
-    const { data: { subscription } } = onAuthStateChange((authUser) => {
+    // Listen for auth changes
+    const { data: { subscription } } = onAuthStateChange((authUser: AuthUser | null) => {
       if (authUser) {
-        const userData = convertAuthUserToUser(authUser);
-        setUser(userData);
-        
-        // Sync with local store
+        const u = toUser(authUser);
+        setUser(u);
         const state = getAppState();
-        state.currentUser = userData;
+        state.currentUser = u;
         setAppState(state);
       } else {
         setUser(null);
@@ -85,104 +110,72 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // PRESERVED: Legacy localStorage sync (for backward compatibility)
+  // ── Legacy localStorage sync (backward-compat) ────────────────
+
   useEffect(() => {
-    const handleStorageChange = () => {
+    const handle = () => {
       const state = getAppState();
       if (state.currentUser && (!user || state.currentUser.id !== user.id)) {
         setUser(state.currentUser);
       }
     };
-    
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('farmsquare:state-changed', handleStorageChange);
-    
+    window.addEventListener('storage', handle);
+    window.addEventListener('farmsquare:state-changed', handle);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('farmsquare:state-changed', handleStorageChange);
+      window.removeEventListener('storage', handle);
+      window.removeEventListener('farmsquare:state-changed', handle);
     };
   }, [user]);
 
+  // ── Login (post-authentication sync) ──────────────────────────
+
   const login = async (role: UserRole, name?: string, region?: string): Promise<void> => {
-    // This function is called after successful authentication
-    // It syncs the user data to local state and store
-    
-    // Try to get current user from auth service
-    const { user: authUser, error } = await getCurrentUser();
-    
-    if (!error && authUser) {
-      // Use auth service user data
-      const userData = convertAuthUserToUser(authUser);
-      
-      // Update name/region if provided (for profile completion)
-      if (name) userData.name = name;
-      if (region) userData.region = region;
-      
-      setUser(userData);
-      
-      // Sync with local store
+    const { user: authUser } = await getCurrentUser();
+
+    if (authUser) {
+      const u = toUser(authUser);
+      if (name) u.name = name;
+      if (region) u.region = region;
+      setUser(u);
       const state = getAppState();
-      state.currentUser = userData;
+      state.currentUser = u;
       setAppState(state);
     } else {
-      // Fallback: Create user from provided data (for development/testing)
+      // Fallback (development / mock)
       const state = getAppState();
       let existingUser: User | undefined;
-
-      // Find or create user based on role
       switch (role) {
-        case 'farmer':
-          existingUser = state.farmers[0];
-          break;
-        case 'buyer':
-          existingUser = state.buyers[0];
-          break;
-        case 'agent':
-          existingUser = state.agents[0];
-          break;
-        case 'admin':
-          existingUser = state.admins[0];
-          break;
+        case 'farmer':  existingUser = state.farmers[0];  break;
+        case 'buyer':   existingUser = state.buyers[0];   break;
+        case 'agent':   existingUser = state.agents[0];   break;
+        case 'admin':   existingUser = state.admins[0];   break;
       }
 
       if (existingUser) {
-        // Update name/region if provided
         if (name) existingUser.name = name;
         if (region) existingUser.region = region;
-        
         state.currentUser = existingUser;
         setAppState(state);
         setUser(existingUser);
       } else {
-        // Create new user
         const newUser: User = {
           id: `${role}_${Date.now()}`,
           name: name || `${role} User`,
           phone: '+2348000000000',
-          role: role,
+          role,
           region: region || 'Lagos',
           kycStatus: role === 'admin' ? 'APPROVED' : 'NOT_STARTED',
           createdAt: new Date().toISOString(),
         };
-        
-        // Add to appropriate array
         switch (role) {
-          case 'farmer':
-            state.farmers.push(newUser as any);
-            break;
-          case 'buyer':
-            state.buyers.push(newUser as any);
-            break;
-          case 'agent':
-            state.agents.push({ ...newUser, farmersOnboarded: 0, inspectionsCompleted: 0 } as any);
-            break;
-          case 'admin':
-            state.admins.push(newUser as any);
-            break;
+          case 'farmer':  state.farmers.push(newUser as any);  break;
+          case 'buyer':   state.buyers.push(newUser as any);   break;
+          case 'agent':   state.agents.push({ ...newUser, farmersOnboarded: 0, inspectionsCompleted: 0 } as any); break;
+          case 'admin':   state.admins.push(newUser as any);   break;
         }
-        
         state.currentUser = newUser;
         setAppState(state);
         setUser(newUser);
@@ -190,23 +183,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // ── Logout ────────────────────────────────────────────────────
+
   const logout = async (): Promise<void> => {
-    // Sign out (clears auth state)
-    await authSignOut();
-    
-    // Clear local state
+    await performSignOut();
     const state = getAppState();
     state.currentUser = null;
     setAppState(state);
     setUser(null);
   };
 
-  // Show loading state while initializing auth
+  // ── Loading spinner ───────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
@@ -221,9 +214,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 };

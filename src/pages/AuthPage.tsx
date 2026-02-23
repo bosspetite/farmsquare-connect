@@ -4,11 +4,31 @@ import { Tractor, ShoppingBag, Users, Shield, ArrowLeft, Phone, Check, Mail, Loc
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
-import { signUp, signIn, validateEmail, validatePassword } from '@/services/authService';
-import logo from '@/assets/logo.png';
 
-// TEMPORARY: Using email/password for all roles during development
-// TODO: Switch back to Phone OTP for Farmers/Buyers in production
+// ── Import BOTH auth backends & auto-detect ─────────────────────────
+import {
+  signUp as supabaseSignUp,
+  signIn as supabaseSignIn,
+  validateEmail as supabaseValidateEmail,
+  validatePassword as supabaseValidatePassword,
+} from '@/services/supabaseAuthService';
+import {
+  signUp as mockSignUp,
+  signIn as mockSignIn,
+  validateEmail as mockValidateEmail,
+  validatePassword as mockValidatePassword,
+} from '@/services/authService';
+
+const USE_SUPABASE = Boolean(
+  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const signUp = USE_SUPABASE ? supabaseSignUp : mockSignUp;
+const signIn = USE_SUPABASE ? supabaseSignIn : mockSignIn;
+const validateEmail = USE_SUPABASE ? supabaseValidateEmail : mockValidateEmail;
+const validatePassword = USE_SUPABASE ? supabaseValidatePassword : mockValidatePassword;
+
+import logo from '@/assets/logo.png';
 type AuthStep = 'signup' | 'login' | 'role' | 'profile';
 
 // PRESERVED: Phone OTP steps for future restoration
@@ -184,9 +204,10 @@ const AuthPage = () => {
         email,
         password,
         fullName: name,
+        phone: '+2340000000000', // Placeholder – updated after profile completion
         role: selectedRole,
         region,
-      });
+      } as any);
 
       if (authError || !authUser) {
         setError(authError?.message || 'Failed to create account');

@@ -1,44 +1,38 @@
 /**
  * Supabase Client Configuration
- * 
- * This file initializes the Supabase client using Vite environment variables.
- * 
- * Required environment variables:
- * - VITE_SUPABASE_URL: Your Supabase project URL
- * - VITE_SUPABASE_ANON_KEY: Your Supabase anonymous/public key
- * 
- * Add these to your .env file:
- * VITE_SUPABASE_URL=https://your-project.supabase.co
- * VITE_SUPABASE_ANON_KEY=your-anon-key
+ *
+ * If VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set, a real Supabase
+ * client is created.  Otherwise a lightweight stub is exported so the rest
+ * of the app can import `supabase` without crashing – but all calls will
+ * be no-ops and the app falls back to localStorage.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Get environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-// Validate environment variables
-if (!supabaseUrl) {
-  throw new Error(
-    'Missing VITE_SUPABASE_URL environment variable. ' +
-    'Please add it to your .env file: VITE_SUPABASE_URL=https://your-project.supabase.co'
+let supabase: SupabaseClient;
+
+if (supabaseUrl && supabaseAnonKey) {
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+  console.log('🟢 Supabase client initialized (connected to', supabaseUrl, ')');
+} else {
+  console.warn(
+    '🟡 Supabase env vars missing – running in localStorage-only mode.\n' +
+      '   Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env to enable Supabase.'
   );
+  // Create a stub client pointing at a dummy URL so imports don't crash.
+  // All actual DB calls will fail gracefully and the app uses localStorage.
+  supabase = createClient('https://placeholder.supabase.co', 'placeholder-key', {
+    auth: { persistSession: false },
+  });
 }
 
-if (!supabaseAnonKey) {
-  throw new Error(
-    'Missing VITE_SUPABASE_ANON_KEY environment variable. ' +
-    'Please add it to your .env file: VITE_SUPABASE_ANON_KEY=your-anon-key'
-  );
-}
-
-// Create and export Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
-
+export { supabase };
