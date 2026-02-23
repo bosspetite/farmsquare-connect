@@ -1,0 +1,649 @@
+================================================================================
+                    FARMSQUARE PRODUCT REQUIREMENTS DOCUMENT
+================================================================================
+
+PROJECT: FarmSquare - B2B Agricultural Marketplace Platform
+VERSION: 1.0
+DATE: January 2024
+STATUS: Source of Truth for Implementation Tracking
+
+================================================================================
+                            EXECUTIVE SUMMARY
+================================================================================
+
+FarmSquare is a B2B agricultural marketplace platform connecting farmers 
+directly with buyers in Nigeria. The platform eliminates middlemen, ensures 
+fair pricing, and provides quality verification through a network of field 
+agents.
+
+KEY OBJECTIVES:
+- Connect farmers directly with buyers
+- Ensure quality verification at source
+- Provide secure escrow payment system
+- Enable transparent order tracking
+- Support multiple user roles (Farmer, Buyer, Agent, Admin)
+
+================================================================================
+                            PROJECT PHASES
+================================================================================
+
+PHASE 1: FRONTEND UI (CURRENT PHASE)
+PHASE 2: BACKEND API INTEGRATION
+PHASE 3: PAYMENT PROCESSING
+PHASE 4: ADVANCED FEATURES
+PHASE 5: MOBILE APPLICATIONS
+
+================================================================================
+                            PHASE 1: FRONTEND UI
+================================================================================
+
+STATUS: IN PROGRESS
+COMPLETION CRITERIA: All UI components functional with mock data
+
+1.1 PUBLIC LANDING PAGE
+-----------------------
+REQUIREMENTS:
+- Hero section with value proposition
+- Features section
+- How it works section
+- Testimonials section
+- Partners section
+- Footer with all links
+- Responsive design (mobile-first)
+- Call-to-action buttons
+
+ACCEPTANCE CRITERIA:
+✅ Landing page renders without errors
+✅ All sections display correctly
+✅ All footer links are clickable and functional
+✅ Responsive on mobile, tablet, desktop
+✅ Testimonials section displays 3 testimonial cards
+✅ Partners section displays 6 partner placeholders
+
+1.2 AUTHENTICATION & ONBOARDING
+--------------------------------
+REQUIREMENTS:
+- Phone number authentication
+- OTP verification
+- Role selection (Farmer, Buyer, Agent, Admin)
+- Profile setup
+- Region selection
+
+ACCEPTANCE CRITERIA:
+✅ Users can register with phone number
+✅ OTP verification works
+✅ Role selection saves correctly
+✅ Profile data persists
+✅ Users redirected to appropriate dashboard after registration
+
+1.3 FARMER DASHBOARD
+-------------------
+REQUIREMENTS:
+1.3.1 KYC Verification
+  - Personal information form
+  - Government ID upload (NIN, Passport, Driver's License, Voter's Card)
+  - Selfie photo upload
+  - Status tracking (NOT_STARTED, IN_REVIEW, APPROVED, REJECTED)
+  - Re-submission capability if rejected
+  - Title: "Farmer Verification (KYC)"
+  - NO Date of Birth requirement
+
+1.3.2 Listings Management
+  - Create listing form with:
+    * Commodity selection (Maize, Cassava, Rice, Yam, Sorghum)
+    * Grade selection (A, B, C)
+    * Quantity (kg)
+    * Price per kg (₦)
+    * Photos (1-3 images)
+    * Location (auto-filled from region)
+  - List all listings with filters
+  - Edit listing (price, quantity)
+  - Pause/Resume listing
+  - Delete listing (with confirmation)
+  - Quantity validation (cannot reduce below active orders)
+
+1.3.3 Orders Management
+  - View all orders with status filters
+  - Order detail view with timeline
+  - Accept order
+  - Reject order (with automatic refund)
+  - Update order status (Accepted → Processing → Pickup Scheduled → In Transit → Delivered)
+  - Order tracking visualization
+
+1.3.4 Wallet & Earnings
+  - Display available balance
+  - Display pending balance (escrow)
+  - Transaction history
+  - Withdrawal functionality
+  - KYC check enforced for withdrawals
+
+ACCEPTANCE CRITERIA:
+✅ All farmer features functional
+✅ KYC form does not request Date of Birth
+✅ Listings create/edit/delete work
+✅ Orders accept/reject/update work
+✅ Wallet displays correct balances
+✅ Withdrawals blocked if KYC not approved
+✅ All data persists in localStorage
+
+1.4 BUYER DASHBOARD
+-------------------
+REQUIREMENTS:
+1.4.1 Business Verification (KYB)
+  - Business Information:
+    * Business Name (required)
+    * Business Type (Individual, Company, Partnership) (required)
+    * CAC Registration Number (required)
+    * Business Address (required)
+    * Business Email (required)
+    * Business Phone (required)
+  - Authorized Representative:
+    * Full Name (required)
+    * Role in Business (required)
+    * Government ID upload (required)
+  - CAC Certificate upload (required)
+  - NO Date of Birth field
+  - NO Selfie requirement
+  - Title: "Business Verification (KYB)"
+  - Status tracking (NOT_STARTED, IN_REVIEW, APPROVED, REJECTED)
+  - Rejection reason display
+
+1.4.2 Marketplace
+  - Browse all active listings
+  - Filter by commodity, grade, region
+  - Search functionality
+  - View listing details
+  - Place orders
+  - Verification warning if not verified
+
+1.4.3 Orders Management
+  - View all orders
+  - Order detail view with timeline
+  - Track order progress
+  - Confirm delivery
+  - View order history
+
+1.4.4 Wallet
+  - Display available balance
+  - Display pending balance (escrow)
+  - Fund wallet
+  - Transaction history
+  - Payment via Paystack integration
+
+ACCEPTANCE CRITERIA:
+✅ KYB form does not include Date of Birth
+✅ All business fields are required
+✅ Authorized Representative section complete
+✅ Marketplace displays all active listings
+✅ Orders can be placed
+✅ Wallet funding works
+✅ Payment processing functional
+
+1.5 AGENT DASHBOARD
+-------------------
+REQUIREMENTS:
+- Dashboard overview
+- Assigned farmers list
+- Inspections management
+- Delivery assignments
+- Reports
+
+ACCEPTANCE CRITERIA:
+✅ Dashboard loads without errors
+✅ Navigation works
+✅ Basic UI functional
+
+1.6 ADMIN DASHBOARD
+-------------------
+REQUIREMENTS:
+1.6.1 User Management
+  - View all users (Farmers, Buyers, Agents)
+  - Filter by role
+  - View user details
+  - KYC/KYB review functionality
+  - Approve/Reject verification with reason
+
+1.6.2 Listings Management
+  - View all listings
+  - Filter by status
+  - Review listings
+
+1.6.3 Orders Management
+  - View all orders
+  - Filter by status
+  - Order oversight
+  - Dispute resolution
+
+1.6.4 Reports & Analytics
+  - Platform statistics
+  - Transaction reports
+  - User activity reports
+
+ACCEPTANCE CRITERIA:
+✅ Admin can view all users
+✅ KYC/KYB review works
+✅ Rejection reasons can be provided
+✅ All admin features functional
+
+1.7 ORDER TRACKING SYSTEM
+-------------------------
+REQUIREMENTS:
+- Real-time order status updates
+- Delivery tracking visualization
+- Google Maps integration
+- Route visualization
+- Progress percentage
+- ETA calculation
+- Multi-delivery map view (for agents)
+
+ACCEPTANCE CRITERIA:
+✅ Maps load correctly
+✅ Tracking updates in real-time
+✅ Route visualization works
+✅ Multi-delivery view functional
+
+1.8 PAYMENT & ESCROW SYSTEM
+---------------------------
+REQUIREMENTS:
+- Escrow payment holding
+- Automatic fund release on delivery confirmation
+- Refund capability
+- Transaction history
+- Paystack integration for wallet funding
+- Wallet balance management
+
+ACCEPTANCE CRITERIA:
+✅ Payments held in escrow
+✅ Funds release on delivery confirmation
+✅ Refunds work correctly
+✅ Transaction records created
+✅ Paystack integration functional
+
+1.9 PUBLIC PAGES
+----------------
+REQUIREMENTS:
+- How It Works page
+- About page
+- Contact page
+- Terms of Service page
+- Privacy Policy page
+- FAQ page
+- Pricing page
+- Support page
+
+ACCEPTANCE CRITERIA:
+✅ All pages render correctly
+✅ All links functional
+✅ Content displays properly
+✅ Footer consistent across all pages
+
+1.10 RESPONSIVE DESIGN
+----------------------
+REQUIREMENTS:
+- Mobile-first approach
+- Tablet optimization
+- Desktop optimization
+- Touch-friendly interfaces
+- Accessible navigation
+
+ACCEPTANCE CRITERIA:
+✅ All pages responsive
+✅ Mobile navigation works
+✅ Touch targets appropriate size
+✅ No horizontal scrolling on mobile
+
+================================================================================
+                            PHASE 2: BACKEND API INTEGRATION
+================================================================================
+
+STATUS: NOT STARTED
+COMPLETION CRITERIA: All frontend API calls connected to backend
+
+2.1 AUTHENTICATION API
+----------------------
+REQUIREMENTS:
+- Phone number authentication endpoint
+- OTP generation and verification
+- JWT token management
+- Session management
+- Role-based access control
+
+2.2 USER MANAGEMENT API
+-----------------------
+REQUIREMENTS:
+- User CRUD operations
+- Profile management
+- KYC/KYB data storage
+- Document upload and storage
+- Verification status management
+
+2.3 LISTINGS API
+----------------
+REQUIREMENTS:
+- Create listing
+- Update listing
+- Delete listing
+- List all listings with filters
+- Search functionality
+- Image upload and storage
+
+2.4 ORDERS API
+--------------
+REQUIREMENTS:
+- Create order
+- Update order status
+- Order tracking data
+- Order history
+- Order details retrieval
+
+2.5 PAYMENT API
+---------------
+REQUIREMENTS:
+- Wallet management
+- Escrow management
+- Payment processing
+- Refund processing
+- Transaction history
+- Paystack webhook integration
+
+2.6 NOTIFICATION API
+--------------------
+REQUIREMENTS:
+- Email notifications
+- SMS notifications
+- In-app notifications
+- Push notifications (future)
+
+2.7 REPORTING API
+-----------------
+REQUIREMENTS:
+- Analytics data
+- Transaction reports
+- User activity reports
+- Platform statistics
+
+================================================================================
+                            PHASE 3: PAYMENT PROCESSING
+================================================================================
+
+STATUS: NOT STARTED
+COMPLETION CRITERIA: Real payment processing integrated
+
+3.1 PAYSTACK INTEGRATION
+------------------------
+REQUIREMENTS:
+- Wallet funding
+- Payment processing
+- Webhook handling
+- Transaction verification
+- Refund processing
+
+3.2 ESCROW SYSTEM
+-----------------
+REQUIREMENTS:
+- Secure fund holding
+- Automatic release triggers
+- Manual release capability
+- Dispute handling
+- Refund automation
+
+3.3 BANK INTEGRATION
+--------------------
+REQUIREMENTS:
+- Bank account verification
+- Withdrawal processing
+- Bank transfer automation
+- Transaction reconciliation
+
+================================================================================
+                            PHASE 4: ADVANCED FEATURES
+================================================================================
+
+STATUS: NOT STARTED
+COMPLETION CRITERIA: Advanced features implemented and tested
+
+4.1 REAL-TIME NOTIFICATIONS
+---------------------------
+REQUIREMENTS:
+- WebSocket integration
+- Real-time order updates
+- Status change notifications
+- Message notifications
+
+4.2 ADVANCED ANALYTICS
+----------------------
+REQUIREMENTS:
+- Dashboard analytics
+- Sales reports
+- Market intelligence
+- Price trends
+- User behavior analytics
+
+4.3 DISPUTE RESOLUTION SYSTEM
+------------------------------
+REQUIREMENTS:
+- Dispute creation
+- Evidence upload
+- Admin review interface
+- Resolution workflow
+- Automated escalation
+
+4.4 QUALITY ASSURANCE SYSTEM
+----------------------------
+REQUIREMENTS:
+- Agent inspection workflow
+- Quality grading system
+- Photo evidence management
+- Inspection reports
+
+4.5 LOGISTICS MANAGEMENT
+------------------------
+REQUIREMENTS:
+- Delivery scheduling
+- Route optimization
+- Driver assignment
+- Delivery tracking
+- Proof of delivery
+
+================================================================================
+                            PHASE 5: MOBILE APPLICATIONS
+================================================================================
+
+STATUS: NOT STARTED
+COMPLETION CRITERIA: Mobile apps available on iOS and Android
+
+5.1 FARMER MOBILE APP
+---------------------
+REQUIREMENTS:
+- All farmer dashboard features
+- Camera integration for photos
+- Push notifications
+- Offline capability
+
+5.2 BUYER MOBILE APP
+--------------------
+REQUIREMENTS:
+- All buyer dashboard features
+- Marketplace browsing
+- Order tracking
+- Push notifications
+
+5.3 AGENT MOBILE APP
+--------------------
+REQUIREMENTS:
+- Inspection management
+- Delivery tracking
+- Photo capture
+- GPS tracking
+
+================================================================================
+                            TECHNICAL REQUIREMENTS
+================================================================================
+
+FRONTEND STACK:
+- React.js with TypeScript
+- Vite build tool
+- Tailwind CSS
+- React Router DOM
+- Zustand for state management
+- shadcn/ui components
+- Google Maps API
+
+BACKEND STACK (FUTURE):
+- Node.js / Python
+- RESTful API
+- Database (PostgreSQL/MongoDB)
+- File storage (AWS S3/Cloudinary)
+- Redis for caching
+
+DEPLOYMENT:
+- Frontend: Vercel / GitHub Pages
+- Backend: AWS / Heroku / Railway
+- CDN for static assets
+- SSL certificates
+
+================================================================================
+                            DATA MODELS
+================================================================================
+
+USER:
+- id, name, phone, role, region, kycStatus, createdAt
+
+FARMER (extends USER):
+- role: 'farmer'
+
+BUYER (extends USER):
+- role: 'buyer'
+- companyName (optional)
+
+AGENT (extends USER):
+- role: 'agent'
+- farmersOnboarded, inspectionsCompleted
+
+ADMIN (extends USER):
+- role: 'admin'
+
+KYC_DATA:
+- userId, status, submittedAt, rejectionReason
+- Personal: fullName, phoneNumber, address, idType, idNumber, idDocumentFile, selfieFile
+- Business: businessName, businessType, businessRegistrationNumber, businessAddress, businessEmail, businessPhone, businessDocumentFile
+- Authorized Rep: authorizedRepresentativeName, authorizedRepresentativeRole, authorizedRepresentativeIdFile
+
+LISTING:
+- id, farmerId, farmerName, commodity, grade, quantityKg, pricePerKg, photos, locationLabel, region, status, createdAt
+
+ORDER:
+- id, buyerId, buyerName, farmerId, farmerName, listingId, commodity, quantityKg, pricePerKg, amount, status, paymentStatus, paymentMethod, paymentReference, pickupLocation, buyerLocation, farmerLocation, deliveryLocation, tracking, createdAt, acceptedAt, processingAt, pickupScheduledAt, inTransitAt, deliveredAt, evidence
+
+WALLET:
+- userId, available, pending, locked, currency, withdrawn
+
+TRANSACTION:
+- id, userId, type, title, amount, createdAt, status, reference, orderId, metadata
+
+================================================================================
+                            BUSINESS RULES
+================================================================================
+
+KYC/KYB VERIFICATION:
+- Farmers must complete KYC before withdrawals
+- Buyers must complete KYB before placing orders
+- Admin can approve/reject with reason
+- Rejected users can resubmit
+
+LISTINGS:
+- Only active listings appear in marketplace
+- Quantity cannot be reduced below active orders
+- Paused listings hidden from buyers
+
+ORDERS:
+- Orders create escrow automatically
+- Rejected orders trigger automatic refund
+- Delivered orders release funds to farmer
+- Buyer must confirm delivery
+
+PAYMENTS:
+- All payments held in escrow
+- Funds released on delivery confirmation
+- Refunds processed automatically on rejection
+- Withdrawals require KYC approval
+
+================================================================================
+                            ACCEPTANCE CRITERIA SUMMARY
+================================================================================
+
+PHASE 1 COMPLETE WHEN:
+✅ All UI pages render without errors
+✅ All forms submit correctly
+✅ All navigation works
+✅ All data persists
+✅ KYC/KYB flows correct (no Date of Birth in KYB)
+✅ Payment flows functional
+✅ Order tracking works
+✅ Responsive design verified
+✅ No TypeScript errors
+✅ No console errors
+
+PHASE 2 COMPLETE WHEN:
+✅ All API endpoints connected
+✅ Data persists in database
+✅ Authentication works
+✅ File uploads work
+✅ Real-time updates functional
+
+PHASE 3 COMPLETE WHEN:
+✅ Real payments process
+✅ Escrow system operational
+✅ Refunds work
+✅ Withdrawals process
+
+PHASE 4 COMPLETE WHEN:
+✅ All advanced features implemented
+✅ Analytics functional
+✅ Dispute system operational
+
+PHASE 5 COMPLETE WHEN:
+✅ Mobile apps published
+✅ All features available on mobile
+✅ Push notifications work
+
+================================================================================
+                            DEPLOYMENT READINESS
+================================================================================
+
+FRONTEND READY FOR DEPLOYMENT WHEN:
+- All Phase 1 features complete
+- No critical bugs
+- Performance optimized
+- SEO optimized
+- Analytics integrated
+- Error tracking integrated
+
+BACKEND READY FOR DEPLOYMENT WHEN:
+- All Phase 2 features complete
+- Database migrations ready
+- API documentation complete
+- Security audit passed
+- Load testing passed
+
+PRODUCTION READY WHEN:
+- All phases complete
+- Security hardened
+- Monitoring in place
+- Backup systems ready
+- Disaster recovery plan
+
+================================================================================
+                            NOTES
+================================================================================
+
+- This PRD is the SOURCE OF TRUTH for implementation tracking
+- Phase definitions should NOT be changed
+- Progress should be tracked against this document
+- New requirements should be added as new phases or sub-phases
+- Acceptance criteria must be met before marking phases complete
+
+================================================================================
+                            END OF DOCUMENT
+================================================================================
+
