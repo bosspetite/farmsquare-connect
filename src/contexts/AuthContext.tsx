@@ -1,205 +1,294 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { User, UserRole } from '@/types';
 import { getAppState, setAppState } from '@/lib/store';
+import { getCurrentUser, signOut as authSignOut, AuthUser } from '@/services/authService';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
+import { AuthContext } from '@/contexts/auth-context';
 
-// ── Import BOTH auth services ──────────────────────────────────────
-// Supabase (real) – used when Supabase env vars are set
-import {
-  getCurrentUser as supabaseGetCurrentUser,
-  onAuthStateChange as supabaseOnAuthStateChange,
-  signOut as supabaseSignOut,
-  AuthUser,
-} from '@/services/supabaseAuthService';
+const AUTH_REQUEST_TIMEOUT_MS = 10000;
+const AUTH_LOADING_FAILSAFE_MS = 12000;
 
-// localStorage (mock) – fallback when Supabase is not configured
-import {
-  getCurrentUser as mockGetCurrentUser,
-  onAuthStateChange as mockOnAuthStateChange,
-  signOut as mockSignOut,
-} from '@/services/authService';
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-// ── Detect which backend to use ────────────────────────────────────
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const useSupabase = Boolean(SUPABASE_URL && SUPABASE_KEY);
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
 
-// Unified wrappers
-const getCurrentUser = useSupabase ? supabaseGetCurrentUser : mockGetCurrentUser;
-const onAuthStateChange = useSupabase ? supabaseOnAuthStateChange : mockOnAuthStateChange;
-const performSignOut = useSupabase ? supabaseSignOut : mockSignOut;
+const toUser = (authUser: AuthUser): User => ({
+  id: authUser.id,
+  name: authUser.fullName,
+  email: authUser.email,
+  phone: authUser.phone || '+2340000000000',
+  role: authUser.role,
+  region: authUser.region,
+  kycStatus: authUser.kycStatus || (authUser.role === 'admin' ? 'APPROVED' : 'NOT_STARTED'),
+  createdAt: new Date().toISOString(),
+});
 
-if (useSupabase) {
-  console.log('🟢 AuthContext: Using Supabase Auth');
-} else {
-  console.log('🟡 AuthContext: Using localStorage mock auth (set VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY to enable Supabase)');
-}
-
-// ── Context type ───────────────────────────────────────────────────
-
-interface AuthContextType {
-  user: User | null;
-  isAuthenticated: boolean;
-  login: (role: UserRole, name?: string, region?: string) => Promise<void>;
-  logout: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// ── Provider ───────────────────────────────────────────────────────
+export const getDashboardPathForRole = (role: UserRole): string => {
+  switch (role) {
+    case 'farmer':
+      return '/farmer/dashboard';
+    case 'buyer':
+      return '/buyer/dashboard';
+    case 'agent':
+      return '/agent/dashboard';
+    case 'admin':
+      return '/admin/dashboard';
+  }
+};
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isMountedRef = useRef(true);
 
-  /** Map an AuthUser (from either service) → frontend User */
-  const toUser = (au: AuthUser): User => ({
-    id: au.id,
-    name: au.fullName,
-    phone: au.phone || '+2340000000000',
-    role: au.role,
-    region: au.region,
-    kycStatus: (au as any).kycStatus ?? (au.role === 'admin' ? 'APPROVED' : 'NOT_STARTED'),
-    createdAt: new Date().toISOString(),
-  });
+  const syncUser = (nextUser: User | null) => {
+    setUser(nextUser);
+    const state = getAppState();
+    state.currentUser = nextUser;
+    setAppState(state);
+    return nextUser;
+  };
 
-  // ── Bootstrap ──────────────────────────────────────────────────
+  const clearAuthState = () => {
+    setSession(null);
+    return syncUser(null);
+  };
+
+  const resolveCurrentUser = async (reason: string): Promise<User | null> => {
+    const { user: authUser, error } = await withTimeout(
+      getCurrentUser(),
+      AUTH_REQUEST_TIMEOUT_MS,
+      `Authentication is taking too long during ${reason}.`
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!authUser) {
+      console.log('[AuthContext] No authenticated profile resolved', { reason });
+      return clearAuthState();
+    }
+
+    const nextUser = toUser(authUser);
+    console.log('[AuthContext] Authenticated user resolved', {
+      reason,
+      userId: nextUser.id,
+      role: nextUser.role,
+    });
+    return syncUser(nextUser);
+  };
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        const { user: authUser } = await getCurrentUser();
-        if (authUser) {
-          const u = toUser(authUser);
-          setUser(u);
-          // Keep localStorage in sync (so legacy pages still work)
+    isMountedRef.current = true;
+    const loadingFailsafe = window.setTimeout(() => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      console.warn('[AuthContext] Loading fallback triggered');
+      setIsLoading(false);
+    }, AUTH_LOADING_FAILSAFE_MS);
+
+    if (!isSupabaseConfigured) {
+      const initializeLocalAuth = async () => {
+        try {
+          await resolveCurrentUser('local-init');
+        } catch (error) {
+          console.error('[AuthContext] Local auth initialization failed', error);
           const state = getAppState();
-          state.currentUser = u;
-          setAppState(state);
-        } else {
-          // Fall back to any user stored in localStorage
-          const state = getAppState();
-          if (state.currentUser) setUser(state.currentUser);
+          syncUser(state.currentUser || null);
+        } finally {
+          if (isMountedRef.current) {
+            setIsLoading(false);
+          }
         }
-      } catch (err) {
-        console.error('Auth init error:', err);
-        const state = getAppState();
-        if (state.currentUser) setUser(state.currentUser);
+      };
+
+      initializeLocalAuth();
+
+      return () => {
+        isMountedRef.current = false;
+        window.clearTimeout(loadingFailsafe);
+      };
+    }
+
+    const supabase = getSupabaseClient();
+
+    const initializeSupabaseAuth = async () => {
+      try {
+        const {
+          data: { session: activeSession },
+        } = await withTimeout(
+          supabase.auth.getSession(),
+          AUTH_REQUEST_TIMEOUT_MS,
+          'Session lookup timed out.'
+        );
+
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        setSession(activeSession ?? null);
+
+        if (!activeSession?.user) {
+          console.log('[AuthContext] No active session during initialization');
+          clearAuthState();
+          return;
+        }
+
+        console.log('[AuthContext] Session restored', { userId: activeSession.user.id });
+        await resolveCurrentUser('session-init');
+      } catch (error) {
+        console.error('[AuthContext] Supabase auth initialization failed', error);
+        clearAuthState();
       } finally {
-        setIsLoading(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
-    init();
-
-    // Listen for auth changes
-    const { data: { subscription } } = onAuthStateChange((authUser: AuthUser | null) => {
-      if (authUser) {
-        const u = toUser(authUser);
-        setUser(u);
-        const state = getAppState();
-        state.currentUser = u;
-        setAppState(state);
-      } else {
-        setUser(null);
-        const state = getAppState();
-        state.currentUser = null;
-        setAppState(state);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!isMountedRef.current) {
+        return;
       }
+
+      console.log('[AuthContext] Auth state changed', {
+        event,
+        hasSession: Boolean(nextSession?.user),
+        userId: nextSession?.user?.id ?? null,
+      });
+
+      setSession(nextSession ?? null);
+
+      if (!nextSession?.user) {
+        clearAuthState();
+        setIsLoading(false);
+        return;
+      }
+
+      void (async () => {
+        try {
+          await resolveCurrentUser(`auth-change:${event}`);
+        } catch (error) {
+          console.error('[AuthContext] Failed to resolve user after auth change', error);
+          clearAuthState();
+        } finally {
+          if (isMountedRef.current) {
+            setIsLoading(false);
+          }
+        }
+      })();
     });
 
+    void initializeSupabaseAuth();
+
     return () => {
+      isMountedRef.current = false;
+      window.clearTimeout(loadingFailsafe);
       subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Legacy localStorage sync (backward-compat) ────────────────
-
   useEffect(() => {
-    const handle = () => {
+    if (isSupabaseConfigured) {
+      return undefined;
+    }
+
+    const handleStorageChange = () => {
       const state = getAppState();
-      if (state.currentUser && (!user || state.currentUser.id !== user.id)) {
-        setUser(state.currentUser);
-      }
+      syncUser(state.currentUser || null);
+      setIsLoading(false);
     };
-    window.addEventListener('storage', handle);
-    window.addEventListener('farmsquare:state-changed', handle);
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('farmsquare:state-changed', handleStorageChange);
+
     return () => {
-      window.removeEventListener('storage', handle);
-      window.removeEventListener('farmsquare:state-changed', handle);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('farmsquare:state-changed', handleStorageChange);
     };
-  }, [user]);
+  }, []);
 
-  // ── Login (post-authentication sync) ──────────────────────────
-
-  const login = async (role: UserRole, name?: string, region?: string): Promise<void> => {
-    const { user: authUser } = await getCurrentUser();
-
-    if (authUser) {
-      const u = toUser(authUser);
-      if (name) u.name = name;
-      if (region) u.region = region;
-      setUser(u);
-      const state = getAppState();
-      state.currentUser = u;
-      setAppState(state);
-    } else {
-      // Fallback (development / mock)
-      const state = getAppState();
-      let existingUser: User | undefined;
-      switch (role) {
-        case 'farmer':  existingUser = state.farmers[0];  break;
-        case 'buyer':   existingUser = state.buyers[0];   break;
-        case 'agent':   existingUser = state.agents[0];   break;
-        case 'admin':   existingUser = state.admins[0];   break;
-      }
-
-      if (existingUser) {
-        if (name) existingUser.name = name;
-        if (region) existingUser.region = region;
-        state.currentUser = existingUser;
-        setAppState(state);
-        setUser(existingUser);
-      } else {
-        const newUser: User = {
-          id: `${role}_${Date.now()}`,
-          name: name || `${role} User`,
-          phone: '+2348000000000',
-          role,
-          region: region || 'Lagos',
-          kycStatus: role === 'admin' ? 'APPROVED' : 'NOT_STARTED',
-          createdAt: new Date().toISOString(),
-        };
-        switch (role) {
-          case 'farmer':  state.farmers.push(newUser as any);  break;
-          case 'buyer':   state.buyers.push(newUser as any);   break;
-          case 'agent':   state.agents.push({ ...newUser, farmersOnboarded: 0, inspectionsCompleted: 0 } as any); break;
-          case 'admin':   state.admins.push(newUser as any);   break;
-        }
-        state.currentUser = newUser;
-        setAppState(state);
-        setUser(newUser);
-      }
+  const login = async (_role?: UserRole, _name?: string, _region?: string): Promise<User | null> => {
+    try {
+      return await resolveCurrentUser('login-refresh');
+    } catch (error) {
+      console.error('[AuthContext] Login refresh failed', error);
+      setIsLoading(false);
+      return null;
     }
   };
 
-  // ── Logout ────────────────────────────────────────────────────
-
   const logout = async (): Promise<void> => {
-    await performSignOut();
-    const state = getAppState();
-    state.currentUser = null;
-    setAppState(state);
-    setUser(null);
+    try {
+      console.log('[AuthContext] Signing out', { userId: user?.id ?? null, hasSession: Boolean(session) });
+      const { error } = await withTimeout(
+        authSignOut(),
+        AUTH_REQUEST_TIMEOUT_MS,
+        'Sign out is taking too long. Please try again.'
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      console.log('[AuthContext] Logout success');
+    } catch (error) {
+      console.error('[AuthContext] Logout failed', error);
+      throw error;
+    } finally {
+      clearAuthState();
+      setIsLoading(false);
+      window.location.replace('/');
+    }
   };
 
-  // ── Loading spinner ───────────────────────────────────────────
+  const refreshUser = async (): Promise<User | null> => {
+    try {
+      return await resolveCurrentUser('manual-refresh');
+    } catch (error) {
+      console.error('[AuthContext] Manual refresh failed', error);
+      setIsLoading(false);
+      return null;
+    }
+  };
+
+  const hydrateUser = (nextUser: User | null): User | null => {
+    console.log('[AuthContext] Hydrating user state', {
+      userId: nextUser?.id ?? null,
+      role: nextUser?.role ?? null,
+    });
+    return syncUser(nextUser);
+  };
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
@@ -207,14 +296,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        login,
+        logout,
+        refreshUser,
+        hydrateUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
-  return ctx;
 };

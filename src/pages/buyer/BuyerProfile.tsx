@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, Lock, Phone, MapPin, Key, Shield, AlertCircle, CheckCircle, Building2 } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { Modal } from '@/components/ui/Modal';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { getKYCByUserId } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 
@@ -79,13 +79,15 @@ const BuyerProfile = () => {
   const kycStatus = kycData?.status || 'NOT_STARTED';
   const kycStatusLabels = {
     NOT_STARTED: 'Not Started',
-    IN_REVIEW: 'In Review',
+    PENDING: 'Pending Review',
+    IN_REVIEW: 'Pending Review',
     APPROVED: 'Verified',
     REJECTED: 'Rejected'
   };
 
   const kycStatusColors = {
     NOT_STARTED: 'bg-muted text-muted-foreground',
+    PENDING: 'bg-farm-info/10 text-farm-info',
     IN_REVIEW: 'bg-farm-info/10 text-farm-info',
     APPROVED: 'bg-farm-success/10 text-farm-success',
     REJECTED: 'bg-destructive/10 text-destructive'
@@ -326,8 +328,6 @@ const BuyerProfile = () => {
 };
 
 export default BuyerProfile;
-
-
 
 
 

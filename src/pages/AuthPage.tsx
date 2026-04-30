@@ -2,33 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Tractor, ShoppingBag, Users, Shield, ArrowLeft, Phone, Check, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import { UserRole } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { User, UserRole } from '@/types';
+import { signUp, signIn, validateEmail, validatePassword } from '@/services/authService';
+import type { AuthUser } from '@/services/authService';
+import logo from '@/assets/logo-web.png';
 
-// ── Import BOTH auth backends & auto-detect ─────────────────────────
-import {
-  signUp as supabaseSignUp,
-  signIn as supabaseSignIn,
-  validateEmail as supabaseValidateEmail,
-  validatePassword as supabaseValidatePassword,
-} from '@/services/supabaseAuthService';
-import {
-  signUp as mockSignUp,
-  signIn as mockSignIn,
-  validateEmail as mockValidateEmail,
-  validatePassword as mockValidatePassword,
-} from '@/services/authService';
-
-const USE_SUPABASE = Boolean(
-  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
-const signUp = USE_SUPABASE ? supabaseSignUp : mockSignUp;
-const signIn = USE_SUPABASE ? supabaseSignIn : mockSignIn;
-const validateEmail = USE_SUPABASE ? supabaseValidateEmail : mockValidateEmail;
-const validatePassword = USE_SUPABASE ? supabaseValidatePassword : mockValidatePassword;
-
-import logo from '@/assets/logo.png';
+// TEMPORARY: Using email/password for all roles during development
+// TODO: Switch back to Phone OTP for Farmers/Buyers in production
 type AuthStep = 'signup' | 'login' | 'role' | 'profile';
 
 // PRESERVED: Phone OTP steps for future restoration
@@ -47,13 +28,46 @@ const adminRoles = [
 ];
 
 const ONBOARDING_INTENT_KEY = 'farmsquare_onboarding_intent';
+const AUTH_SUBMISSION_TIMEOUT_MS = 12000;
 
 const regions = ['Kaduna', 'Kano', 'Lagos', 'Oyo', 'Benue', 'Niger', 'Plateau', 'Nasarawa', 'Ekiti', 'Kogi', 'Kwara', 'Osun'];
+
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const mapAuthUserToUser = (authUser: AuthUser): User => ({
+  id: authUser.id,
+  name: authUser.fullName,
+  email: authUser.email,
+  phone: authUser.phone || '+2340000000000',
+  role: authUser.role,
+  region: authUser.region,
+  kycStatus: authUser.kycStatus || (authUser.role === 'admin' ? 'APPROVED' : 'NOT_STARTED'),
+  createdAt: new Date().toISOString(),
+});
 
 const AuthPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login, user } = useAuth();
+  const { login, user, isLoading, hydrateUser } = useAuth();
   
   // Email/Password auth state
   const [step, setStep] = useState<AuthStep>('login');
@@ -71,6 +85,24 @@ const AuthPage = () => {
   const [name, setName] = useState('');
   const [region, setRegion] = useState('');
   const [onboardingIntent, setOnboardingIntent] = useState<UserRole | null>(null);
+
+  const redirectByRole = (role: UserRole) => {
+    console.log('[AuthPage] Redirecting by role', { role });
+    switch (role) {
+      case 'farmer':
+        navigate('/farmer/dashboard', { replace: true });
+        break;
+      case 'buyer':
+        navigate('/buyer/dashboard', { replace: true });
+        break;
+      case 'agent':
+        navigate('/agent/dashboard', { replace: true });
+        break;
+      case 'admin':
+        navigate('/admin/dashboard', { replace: true });
+        break;
+    }
+  };
 
   // PRESERVED: Phone OTP state (for future restoration)
   // const [phone, setPhone] = useState('');
@@ -91,6 +123,32 @@ const AuthPage = () => {
       }
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    console.log('[AuthPage] Existing authenticated user detected on auth page', {
+      userId: user.id,
+      role: user.role,
+    });
+
+    switch (user.role) {
+      case 'farmer':
+        navigate('/farmer/dashboard', { replace: true });
+        break;
+      case 'buyer':
+        navigate('/buyer/dashboard', { replace: true });
+        break;
+      case 'agent':
+        navigate('/agent/dashboard', { replace: true });
+        break;
+      case 'admin':
+        navigate('/admin/dashboard', { replace: true });
+        break;
+    }
+  }, [user, navigate]);
 
   // Handle login with email/password
   const handleLogin = async (e: React.FormEvent) => {
@@ -114,7 +172,11 @@ const AuthPage = () => {
     }
 
     try {
-      const { user: authUser, error: authError } = await signIn({ email, password });
+      const { user: authUser, error: authError } = await withTimeout(
+        signIn({ email, password }),
+        AUTH_SUBMISSION_TIMEOUT_MS,
+        'Sign in is taking too long. Please try again.'
+      );
 
       if (authError || !authUser) {
         setError(authError?.message || 'Invalid email or password');
@@ -122,26 +184,70 @@ const AuthPage = () => {
         return;
       }
 
-      // Login successful - update auth context and redirect
-      login(authUser.role, authUser.fullName, authUser.region);
-
-      // Redirect to appropriate dashboard
-      switch (authUser.role) {
-        case 'farmer':
-          navigate('/farmer/dashboard');
-          break;
-        case 'buyer':
-          navigate('/buyer/dashboard');
-          break;
-        case 'agent':
-          navigate('/agent/dashboard');
-          break;
-        case 'admin':
-          navigate('/admin/dashboard');
-          break;
-      }
+      console.log('[AuthPage] Login success', { userId: authUser.id, role: authUser.role });
+      hydrateUser(mapAuthUserToUser(authUser));
+      redirectByRole(authUser.role);
     } catch (err: any) {
       setError(err.message || 'An error occurred during login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeSignup = async () => {
+    setError(null);
+    setLoading(true);
+
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      setError(emailValidation.message || 'Invalid email');
+      setLoading(false);
+      return;
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message || 'Invalid password');
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    if (!selectedRole || !name || !region) {
+      setError('Please complete your profile before continuing');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { user: authUser, error: authError } = await withTimeout(
+        signUp({
+          email,
+          password,
+          fullName: name,
+          role: selectedRole,
+          region,
+        }),
+        AUTH_SUBMISSION_TIMEOUT_MS,
+        'Account setup is taking too long. Please try again.'
+      );
+
+      if (authError || !authUser) {
+        setError(authError?.message || 'Failed to create account');
+        return;
+      }
+
+      console.log('[AuthPage] Signup success', { userId: authUser.id, role: authUser.role });
+      hydrateUser(mapAuthUserToUser(authUser));
+      sessionStorage.removeItem(ONBOARDING_INTENT_KEY);
+      redirectByRole(authUser.role);
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during signup');
     } finally {
       setLoading(false);
     }
@@ -198,49 +304,7 @@ const AuthPage = () => {
       return;
     }
 
-    // All data ready - create account
-    try {
-      const { user: authUser, error: authError } = await signUp({
-        email,
-        password,
-        fullName: name,
-        phone: '+2340000000000', // Placeholder – updated after profile completion
-        role: selectedRole,
-        region,
-      } as any);
-
-      if (authError || !authUser) {
-        setError(authError?.message || 'Failed to create account');
-        setLoading(false);
-        return;
-      }
-
-      // Signup successful - login and redirect
-      login(authUser.role, authUser.fullName, authUser.region);
-
-      // Clear onboarding intent
-      sessionStorage.removeItem(ONBOARDING_INTENT_KEY);
-
-      // Redirect to appropriate dashboard
-      switch (authUser.role) {
-        case 'farmer':
-          navigate('/farmer/dashboard');
-          break;
-        case 'buyer':
-          navigate('/buyer/dashboard');
-          break;
-        case 'agent':
-          navigate('/agent/dashboard');
-          break;
-        case 'admin':
-          navigate('/admin/dashboard');
-          break;
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during signup');
-    } finally {
-      setLoading(false);
-    }
+    await completeSignup();
   };
 
   // PRESERVED: Phone OTP handlers (for future restoration)
@@ -309,48 +373,51 @@ const AuthPage = () => {
   */
 
   const handleRoleSelect = (role: UserRole) => {
+    setError(null);
     setSelectedRole(role);
     setStep('profile');
   };
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (!name || !region || !selectedRole) {
       setError('Please fill in all fields');
+      console.error('[AuthPage] Complete setup validation failed', {
+        hasName: Boolean(name),
+        hasRegion: Boolean(region),
+        selectedRole,
+      });
       return;
     }
 
     // If we're in signup flow, complete the signup
     if (isSignup && email && password) {
-      // Validate password confirmation if we're completing signup
-      if (password !== confirmPassword) {
-        setError('Passwords do not match');
-        return;
-      }
-      await handleSignup();
+      await completeSignup();
       return;
     }
 
     // Otherwise, just update profile (for existing users - fallback)
-    login(selectedRole, name, region);
+    const currentUser = await withTimeout(
+      login(selectedRole, name, region),
+      AUTH_SUBMISSION_TIMEOUT_MS,
+      'Profile refresh is taking too long. Please try again.'
+    );
+
+    console.log('[AuthPage] Complete setup fallback resolved user', {
+      userId: currentUser?.id ?? null,
+      resolvedRole: currentUser?.role ?? null,
+      selectedRole,
+    });
     
     // Clear onboarding intent after successful setup
     sessionStorage.removeItem(ONBOARDING_INTENT_KEY);
     
     // Navigate to appropriate dashboard
-    switch (selectedRole) {
-      case 'farmer':
-        navigate('/farmer/dashboard');
-        break;
-      case 'buyer':
-        navigate('/buyer/dashboard');
-        break;
-      case 'agent':
-        navigate('/agent/dashboard');
-        break;
-      case 'admin':
-        navigate('/admin/dashboard');
-        break;
+    if (currentUser) {
+      redirectByRole(currentUser.role);
+    } else {
+      redirectByRole(selectedRole);
     }
   };
 
@@ -403,6 +470,12 @@ const AuthPage = () => {
 
       <main className="flex-1 flex flex-col justify-center px-4 pb-8">
         <div className="w-full max-w-md mx-auto">
+          {isLoading && (
+            <div className="mb-6 p-4 bg-card border border-border rounded-2xl text-center">
+              <p className="text-sm text-muted-foreground">Checking your session...</p>
+            </div>
+          )}
+
           {/* Login Step */}
           {step === 'login' && (
             <div className="animate-fade-up">
@@ -726,6 +799,12 @@ const AuthPage = () => {
               <p className="text-muted-foreground mb-8">
                 Tell us a bit about yourself
               </p>
+
+              {error && (
+                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
               
               <form onSubmit={handleProfileSubmit} className="space-y-4">
                 <div>
@@ -738,6 +817,7 @@ const AuthPage = () => {
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Enter your full name"
                     className="w-full px-4 py-4 bg-card border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary min-h-[52px] text-base"
+                    disabled={loading}
                   />
                 </div>
                 
@@ -749,6 +829,7 @@ const AuthPage = () => {
                     value={region}
                     onChange={(e) => setRegion(e.target.value)}
                     className="w-full px-4 py-4 bg-card border border-border rounded-2xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary appearance-none min-h-[52px] text-base"
+                    disabled={loading}
                   >
                     <option value="">Select your region</option>
                     {regions.map((r) => (
@@ -759,11 +840,11 @@ const AuthPage = () => {
                 
                 <button
                   type="submit"
-                  disabled={!name || !region}
+                  disabled={loading || !name || !region}
                   className="w-full py-4 bg-primary text-primary-foreground rounded-lg text-base font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] min-h-[52px]"
                 >
                   <Check className="w-5 h-5" />
-                  Complete Setup
+                  {loading ? 'Completing setup...' : 'Complete Setup'}
                 </button>
               </form>
             </div>

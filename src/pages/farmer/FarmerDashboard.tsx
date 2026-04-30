@@ -6,69 +6,57 @@ import { WalletCard } from '@/components/ui/WalletCard';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { StatCard } from '@/components/ui/StatCard';
 import { Modal } from '@/components/ui/Modal';
-import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState, getKYCByUserId, setAppState } from '@/lib/store';
-import { useOrderStore } from '@/stores/orderStore';
+import { useAuth } from '@/hooks/useAuth';
+import { getWalletByUserId, getListingsByFarmerId, formatNaira, formatTimeAgo, getAppState, setAppState } from '@/lib/store';
 import { getProduceImage } from '@/utils/produceImages';
+import { getKycRecordByUserId } from '@/services/kycService';
+import { Order } from '@/types';
+import { getFarmerOrders } from '@/services/orderService';
 
 const FarmerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [showPriceInfoModal, setShowPriceInfoModal] = useState(false);
-  // Use Zustand store for orders - single source of truth
-  const { getFarmerOrders, refreshOrders, subscribe } = useOrderStore();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [wallet, setWallet] = useState<any>(null);
   const [kycData, setKycData] = useState<any>(null);
   const [state, setState] = useState(getAppState());
 
-  // Get orders from Zustand store - always refresh first
-  const allOrders = useMemo(() => {
-    if (!user) return [];
-    // Refresh store before getting orders to ensure we have latest data
-    refreshOrders();
-    return getFarmerOrders(user.id);
-  }, [user, refreshKey, getFarmerOrders, refreshOrders]);
-
-  // Subscribe to order changes for real-time updates
+  // Refresh real Supabase-backed orders for dashboard cards.
   useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setRefreshKey(prev => prev + 1);
-    });
+    if (!user) {
+      setAllOrders([]);
+      return;
+    }
 
-    // Refresh on mount
-    refreshOrders();
+    const syncOrders = async () => {
+      try {
+        const orders = await getFarmerOrders(user.id);
+        setAllOrders(orders);
+      } catch (error) {
+        console.error('[FarmerDashboard] Failed to sync orders', error);
+      }
+    };
+
+    void syncOrders();
 
     // Refresh when window gains focus
     const handleFocus = () => {
-      refreshOrders();
-      setRefreshKey(prev => prev + 1);
+      void syncOrders();
     };
     window.addEventListener('focus', handleFocus);
 
-    // Refresh when localStorage changes (cross-tab updates)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'farmsquare_state') {
-        refreshOrders();
-        setRefreshKey(prev => prev + 1);
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-
     // Refresh every 10 seconds for real-time updates
     const interval = setInterval(() => {
-      refreshOrders();
-      setRefreshKey(prev => prev + 1);
+      void syncOrders();
     }, 10000);
 
     return () => {
-      unsubscribe();
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [subscribe, refreshOrders, user]);
+  }, [user?.id]);
 
   // Update other state when user changes
   useEffect(() => {
@@ -76,28 +64,34 @@ const FarmerDashboard = () => {
       const currentState = getAppState();
       setListings(getListingsByFarmerId(user.id));
       setWallet(getWalletByUserId(user.id));
-      // Always get fresh KYC data
-      const freshKycData = getKYCByUserId(user.id);
-      setKycData(freshKycData);
       setState(currentState);
-      
-      // Also update user's KYC status in context if it changed
-      if (freshKycData && currentState.currentUser && currentState.currentUser.id === user.id) {
-        if (currentState.currentUser.kycStatus !== freshKycData.status) {
-          currentState.currentUser.kycStatus = freshKycData.status;
-          setAppState(currentState);
+
+      void (async () => {
+        try {
+          const freshKycData = await getKycRecordByUserId(user.id);
+          setKycData(freshKycData);
+
+          if (freshKycData && currentState.currentUser && currentState.currentUser.id === user.id) {
+            if (currentState.currentUser.kycStatus !== freshKycData.status) {
+              currentState.currentUser.kycStatus = freshKycData.status;
+              setAppState(currentState);
+            }
+          }
+        } catch (error) {
+          console.error('[FarmerDashboard] Failed to load KYC status', error);
+          setKycData({ userId: user.id, status: user.kycStatus });
         }
-      }
+      })();
     } else {
       setListings([]);
       setWallet(null);
       setKycData(null);
     }
-  }, [refreshKey, user]);
+  }, [user]);
 
   const orders = allOrders.slice(0, 3);
   
-  const kycStatus = kycData?.status || 'NOT_STARTED';
+  const kycStatus = kycData?.status || user?.kycStatus || 'NOT_STARTED';
   const isKYCApproved = kycStatus === 'APPROVED';
   
   // Redirect to KYC if verification not started (new users)
@@ -122,7 +116,7 @@ const FarmerDashboard = () => {
   // Calculate stats (memoized for performance)
   const activeListings = useMemo(() => listings.filter(l => l.status === 'Active').length, [listings]);
   const totalOrders = useMemo(() => allOrders.length, [allOrders]);
-  const pendingOrders = useMemo(() => allOrders.filter(o => o.status === 'Pending').length, [allOrders]);
+  const pendingOrders = useMemo(() => allOrders.filter(o => o.status === 'Paid').length, [allOrders]);
   const completedOrders = useMemo(() => allOrders.filter(o => o.status === 'Delivered').length, [allOrders]);
   const totalRevenue = useMemo(() => 
     allOrders
@@ -153,14 +147,14 @@ const FarmerDashboard = () => {
           <div className={`farm-card ${
             kycStatus === 'REJECTED' 
               ? 'bg-destructive/10 border-destructive/20' 
-              : kycStatus === 'IN_REVIEW'
+              : kycStatus === 'PENDING'
               ? 'bg-farm-info/10 border-farm-info/20'
               : 'bg-farm-warning/10 border-farm-warning/20'
           }`}>
             <div className="flex items-start gap-3">
               {kycStatus === 'REJECTED' ? (
                 <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-              ) : kycStatus === 'IN_REVIEW' ? (
+              ) : kycStatus === 'PENDING' ? (
                 <Shield className="w-5 h-5 text-farm-info flex-shrink-0 mt-0.5" />
               ) : (
                 <Shield className="w-5 h-5 text-farm-warning flex-shrink-0 mt-0.5" />
@@ -169,14 +163,14 @@ const FarmerDashboard = () => {
                 <p className="font-semibold text-foreground mb-1">
                   {kycStatus === 'REJECTED' 
                     ? 'Verification Failed' 
-                    : kycStatus === 'IN_REVIEW'
+                    : kycStatus === 'PENDING'
                     ? 'Verification Under Review'
                     : 'Verification Required'}
                 </p>
                 <p className="text-sm sm:text-base text-muted-foreground mb-3">
                   {kycStatus === 'REJECTED'
                     ? 'Your documents were not approved. Please resubmit to enable withdrawals.'
-                    : kycStatus === 'IN_REVIEW'
+                    : kycStatus === 'PENDING'
                     ? 'Your documents are being reviewed. This usually takes 24-48 hours. You\'ll be notified once approved.'
                     : 'Complete identity verification to enable withdrawals and access all features.'}
                 </p>
@@ -185,14 +179,14 @@ const FarmerDashboard = () => {
                   className={`px-4 py-2 rounded-xl text-sm sm:text-base font-medium ${
                     kycStatus === 'REJECTED'
                       ? 'bg-destructive text-destructive-foreground'
-                      : kycStatus === 'IN_REVIEW'
+                      : kycStatus === 'PENDING'
                       ? 'bg-farm-info text-white'
                       : 'bg-farm-warning text-foreground'
                   }`}
                 >
                   {kycStatus === 'REJECTED' 
                     ? 'Resubmit Documents' 
-                    : kycStatus === 'IN_REVIEW'
+                    : kycStatus === 'PENDING'
                     ? 'View Status'
                     : 'Complete Verification'}
                 </button>
@@ -249,7 +243,7 @@ const FarmerDashboard = () => {
               <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                 isKYCApproved 
                   ? 'bg-[#22C55E]/10' 
-                  : kycStatus === 'IN_REVIEW'
+                  : kycStatus === 'PENDING'
                   ? 'bg-farm-info/10'
                   : kycStatus === 'REJECTED'
                   ? 'bg-destructive/10'
@@ -258,7 +252,7 @@ const FarmerDashboard = () => {
                 <Shield className={`w-5 h-5 sm:w-6 sm:h-6 ${
                   isKYCApproved 
                     ? 'text-[#22C55E]' 
-                    : kycStatus === 'IN_REVIEW'
+                    : kycStatus === 'PENDING'
                     ? 'text-farm-info'
                     : kycStatus === 'REJECTED'
                     ? 'text-destructive'
@@ -271,14 +265,14 @@ const FarmerDashboard = () => {
                   <span className={`ml-2 ${
                     isKYCApproved 
                       ? 'text-[#22C55E]' 
-                      : kycStatus === 'IN_REVIEW'
+                      : kycStatus === 'PENDING'
                       ? 'text-farm-info'
                       : kycStatus === 'REJECTED'
                       ? 'text-destructive'
                       : 'text-farm-warning'
                   }`}>
                     {isKYCApproved ? 'Approved' : 
-                     kycStatus === 'IN_REVIEW' ? 'Under Review' :
+                     kycStatus === 'PENDING' ? 'Pending Review' :
                      kycStatus === 'REJECTED' ? 'Rejected' : 'Pending'}
                   </span>
                 </p>

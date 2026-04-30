@@ -1,176 +1,148 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, User, Package } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Flag, MapPin, User } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Timeline } from '@/components/ui/Timeline';
-import { useAuth } from '@/contexts/AuthContext';
-import { getAppState, updateOrderStatus, formatNaira, formatDate } from '@/lib/store';
-import { OrderStatus } from '@/types';
+import { formatDate, formatNaira } from '@/lib/store';
+import { Escrow, Order, OrderStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
-import { useOrderStore } from '@/stores/orderStore';
+import { getEscrowByOrderId, getOrderById, updateOrderStatus } from '@/services/orderService';
 
 const FarmerOrderDetail = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { getOrderById, refreshOrders, subscribe, updateOrderStatus: updateOrderStatusInStore } = useOrderStore();
-  const [refreshKey, setRefreshKey] = useState(0);
-  
-  // Get order from Zustand store - always refresh first
-  const order = useMemo(() => {
-    if (!orderId) return undefined;
-    // Refresh store before getting order to ensure we have latest data
-    refreshOrders();
-    return getOrderById(orderId);
-  }, [orderId, refreshKey, getOrderById, refreshOrders]);
-  
-  // Subscribe to order changes for real-time updates
-  useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setRefreshKey(prev => prev + 1);
-    });
-    
-    refreshOrders(); // Initial load
-    
-    const handleFocus = () => {
-      refreshOrders();
-      setRefreshKey(prev => prev + 1);
-    };
-    window.addEventListener('focus', handleFocus);
-    
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'farmsquare_state') {
-        refreshOrders();
-        setRefreshKey(prev => prev + 1);
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    
-    const interval = setInterval(() => {
-      refreshOrders();
-      setRefreshKey(prev => prev + 1);
-    }, 5000);
-    
-    return () => {
-      unsubscribe();
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, [subscribe, refreshOrders]);
+  const [order, setOrder] = useState<Order | null>(null);
+  const [escrow, setEscrow] = useState<Escrow | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  const getTimelineEvents = () => {
+  const loadOrder = async () => {
+    if (!orderId) {
+      setLoadError('Order not found');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const [orderRow, escrowRow] = await Promise.all([getOrderById(orderId), getEscrowByOrderId(orderId)]);
+      setOrder(orderRow);
+      setEscrow(escrowRow);
+    } catch (error: any) {
+      setLoadError(error?.message || 'Unable to load this order right now.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadOrder();
+  }, [orderId]);
+
+  const workflowNotes = useMemo(() => {
     if (!order) return [];
-    const events = [
-      { 
-        label: 'Order Placed', 
-        timestamp: formatDate(order.createdAt), 
-        completed: true,
-        description: `Buyer placed order for ${order.quantityKg}kg`
+    return [
+      {
+        label: 'Paid',
+        completed: order.status !== 'Pending',
+        current: order.status === 'Paid',
+        timestamp: order.paymentStatus && order.paymentStatus !== 'Unpaid' ? formatDate(order.createdAt) : undefined,
+        description: 'Buyer payment confirmed and escrow hold created.',
       },
-      { 
-        label: 'Accepted', 
-        timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined, 
-        completed: !!order.acceptedAt, 
-        current: order.status === 'Pending',
-        description: order.acceptedAt ? 'Order accepted, preparing for processing' : 'Waiting for acceptance'
-      },
-      { 
-        label: 'Processing', 
-        timestamp: order.processingAt ? formatDate(order.processingAt) : undefined, 
-        completed: !!order.processingAt || order.status === 'Processing' || ['PickupScheduled', 'InTransit', 'Delivered'].includes(order.status), 
+      {
+        label: 'Accepted',
+        completed: !!order.acceptedAt || ['Processing', 'InTransit', 'Delivered', 'Disputed'].includes(order.status),
         current: order.status === 'Accepted',
-        description: order.processingAt ? 'Order is being processed and prepared' : 'Mark as processing when preparing order'
+        timestamp: order.acceptedAt ? formatDate(order.acceptedAt) : undefined,
+        description: 'Farmer accepted order.',
       },
-      { 
-        label: 'Pickup Scheduled', 
-        timestamp: order.pickupScheduledAt ? formatDate(order.pickupScheduledAt) : undefined, 
-        completed: !!order.pickupScheduledAt, 
+      {
+        label: 'Preparing',
+        completed: !!order.processingAt || ['InTransit', 'Delivered', 'Disputed'].includes(order.status),
         current: order.status === 'Processing',
-        description: order.pickupScheduledAt ? 'Pickup date confirmed' : 'Schedule pickup date'
+        timestamp: order.processingAt ? formatDate(order.processingAt) : undefined,
+        description: 'Farmer is preparing produce.',
       },
-      { 
-        label: 'In Transit', 
-        timestamp: order.inTransitAt ? formatDate(order.inTransitAt) : undefined, 
-        completed: !!order.inTransitAt, 
-        current: order.status === 'PickupScheduled',
-        description: order.inTransitAt ? 'Order is on the way' : 'Mark as in transit after pickup'
-      },
-      { 
-        label: 'Delivered', 
-        timestamp: order.deliveredAt ? formatDate(order.deliveredAt) : undefined, 
-        completed: !!order.deliveredAt, 
+      {
+        label: 'Out for Delivery',
+        completed: !!order.inTransitAt || ['Delivered', 'Disputed'].includes(order.status),
         current: order.status === 'InTransit',
-        description: order.deliveredAt ? 'Order delivered, waiting for buyer confirmation' : 'Mark as delivered when buyer receives'
+        timestamp: order.inTransitAt ? formatDate(order.inTransitAt) : undefined,
+        description: 'Order is on the way to buyer.',
+      },
+      {
+        label: 'Delivered / Completed',
+        completed: !!order.deliveredAt,
+        current: order.status === 'Delivered',
+        timestamp: order.deliveredAt ? formatDate(order.deliveredAt) : undefined,
+        description: order.paymentStatus === 'Released' ? 'Escrow released to wallet.' : 'Waiting for buyer confirmation.',
       },
     ];
-    if (order.status === 'Rejected') {
-      return [{ 
-        label: 'Order Rejected', 
-        completed: true,
-        description: 'Order was rejected, buyer has been refunded'
-      }];
-    }
-    return events;
-  };
+  }, [order]);
 
-  const getNextStatus = (): OrderStatus | null => {
+  const nextStatus = useMemo<OrderStatus | null>(() => {
     if (!order) return null;
-    switch (order.status) {
-      case 'Accepted': return 'Processing';
-      case 'Processing': return 'PickupScheduled';
-      case 'PickupScheduled': return 'InTransit';
-      case 'InTransit': return 'Delivered';
-      default: return null;
-    }
-  };
+    if (order.status === 'Paid') return 'Accepted';
+    if (order.status === 'Accepted') return 'Processing';
+    if (order.status === 'Processing') return 'InTransit';
+    return null;
+  }, [order]);
 
-  const handleProgress = () => {
+  const handleStatusUpdate = async (status: OrderStatus) => {
     if (!order) return;
-    const nextStatus = getNextStatus();
-    if (nextStatus) {
-      updateOrderStatusInStore(order.id, nextStatus);
-      toast({ 
+
+    try {
+      setIsUpdating(true);
+      await updateOrderStatus(order.id, status);
+      await loadOrder();
+      toast({
         title: 'Order status updated',
-        description: nextStatus === 'Delivered' ? 'Waiting for buyer confirmation to release payment.' : undefined
       });
-      setRefreshKey(prev => prev + 1);
-    }
-  };
-  
-  const handleAccept = () => {
-    if (!order) return;
-    updateOrderStatusInStore(order.id, 'Accepted');
-    toast({ title: 'Order accepted!' });
-    setRefreshKey(prev => prev + 1);
-  };
-  
-  const handleReject = () => {
-    if (!order) return;
-    if (window.confirm('Are you sure you want to reject this order? The buyer will be refunded.')) {
-      updateOrderStatusInStore(order.id, 'Rejected');
-      toast({ title: 'Order rejected. Buyer has been refunded.' });
-      setRefreshKey(prev => prev + 1);
+    } catch (error: any) {
+      toast({
+        title: 'Unable to update order',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
-  if (!order) {
+  if (isLoading) {
     return (
       <FarmerLayout>
         <div className="space-y-6 animate-fade-up">
           <button onClick={() => navigate('/farmer/orders')} className="flex items-center gap-2 text-muted-foreground">
             <ArrowLeft className="w-5 h-5" /> Back to Orders
           </button>
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Order not found</p>
+          <div className="farm-card">
+            <div className="h-40 rounded-xl bg-muted animate-pulse" />
           </div>
         </div>
       </FarmerLayout>
     );
   }
 
-  const nextStatus = getNextStatus();
+  if (!order || loadError) {
+    return (
+      <FarmerLayout>
+        <div className="space-y-6 animate-fade-up">
+          <button onClick={() => navigate('/farmer/orders')} className="flex items-center gap-2 text-muted-foreground">
+            <ArrowLeft className="w-5 h-5" /> Back to Orders
+          </button>
+          <div className="farm-card bg-destructive/5 border-destructive/20 text-center py-12">
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <p className="text-foreground font-semibold mb-2">Order unavailable</p>
+            <p className="text-muted-foreground">{loadError || 'Order not found'}</p>
+          </div>
+        </div>
+      </FarmerLayout>
+    );
+  }
 
   return (
     <FarmerLayout>
@@ -179,7 +151,6 @@ const FarmerOrderDetail = () => {
           <ArrowLeft className="w-5 h-5" /> Back to Orders
         </button>
 
-        {/* Order Header */}
         <div className="farm-card">
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -189,9 +160,9 @@ const FarmerOrderDetail = () => {
             <StatusPill status={order.status} />
           </div>
           <p className="text-2xl font-bold text-primary">{formatNaira(order.amount)}</p>
+          <p className="text-xs text-muted-foreground mt-2">Payment: {order.paymentStatus || 'Unpaid'}</p>
         </div>
 
-        {/* Buyer Info */}
         <div className="farm-card">
           <h3 className="text-sm font-medium text-muted-foreground mb-3">Buyer</h3>
           <div className="flex items-center gap-3">
@@ -200,14 +171,13 @@ const FarmerOrderDetail = () => {
             </div>
             <div>
               <p className="font-medium text-foreground">{order.buyerName}</p>
-              <p className="text-sm text-muted-foreground">Enterprise Buyer</p>
+              <p className="text-sm text-muted-foreground">Verified Buyer</p>
             </div>
           </div>
         </div>
 
-        {/* Pickup Location */}
         <div className="farm-card">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">Pickup Location</h3>
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">Delivery Address</h3>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-farm-brown/20 flex items-center justify-center">
               <MapPin className="w-5 h-5 text-farm-brown-light" />
@@ -216,92 +186,65 @@ const FarmerOrderDetail = () => {
           </div>
         </div>
 
-        {/* Timeline */}
         <div className="farm-card">
-          <h3 className="text-sm font-medium text-muted-foreground mb-4">Order Timeline</h3>
-          <Timeline events={getTimelineEvents()} />
+          <h3 className="text-sm font-medium text-muted-foreground mb-4">Workflow Timeline</h3>
+          <Timeline events={workflowNotes} />
         </div>
 
-        {/* Order Summary */}
         <div className="farm-card">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">Order Summary</h3>
-          <div className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">Escrow Summary</h3>
+          <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Commodity</span>
-              <span className="text-sm font-medium text-foreground">{order.commodity}</span>
+              <span className="text-muted-foreground">Escrow Status</span>
+              <span className="text-foreground">{escrow?.status || 'Not created'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Quantity</span>
-              <span className="text-sm font-medium text-foreground">{order.quantityKg}kg</span>
+              <span className="text-muted-foreground">Payment Reference</span>
+              <span className="text-foreground break-all text-right">{order.paymentReference || 'N/A'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Price per kg</span>
-              <span className="text-sm font-medium text-foreground">{formatNaira(order.pricePerKg)}</span>
-            </div>
-            <div className="pt-2 border-t border-border flex justify-between">
-              <span className="text-sm font-semibold text-foreground">Total Amount</span>
-              <span className="text-lg font-bold text-primary">{formatNaira(order.amount)}</span>
+              <span className="text-muted-foreground">Released At</span>
+              <span className="text-foreground">{escrow?.releasedAt ? formatDate(escrow.releasedAt) : 'Pending'}</span>
             </div>
           </div>
         </div>
 
-        {/* Evidence - Field Agent Verification (Read-only) */}
-        {order.evidence && (
-          <div className="farm-card">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">Delivery Evidence</h3>
-            <p className="text-xs text-muted-foreground mb-3">Verified by Field Agent</p>
-            {order.evidence.photos.length > 0 && (
-              <div className="flex gap-2 mb-3">
-                {order.evidence.photos.map((photo, i) => (
-                  <img 
-                    key={i} 
-                    src={photo} 
-                    alt={`Evidence ${i + 1}`} 
-                    className="w-20 h-20 rounded-xl object-cover border border-border"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-            {order.evidence.notes && (
-              <div className="p-3 bg-muted/50 rounded-xl">
-                <p className="text-sm text-foreground">{order.evidence.notes}</p>
-              </div>
-            )}
-            {order.evidence.timestamp && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Verified: {formatDate(order.evidence.timestamp)}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        {order.status === 'Pending' && (
+        {order.status === 'Paid' && (
           <div className="space-y-3">
             <button
-              onClick={handleAccept}
-              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
+              onClick={() => void handleStatusUpdate('Accepted')}
+              disabled={isUpdating}
+              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow disabled:opacity-50"
             >
-              Accept Order
+              {isUpdating ? 'Saving...' : 'Accept Order'}
             </button>
             <button
-              onClick={handleReject}
-              className="w-full py-4 bg-destructive/10 text-destructive rounded-xl font-medium border border-destructive/20"
+              onClick={() => void handleStatusUpdate('Rejected')}
+              disabled={isUpdating}
+              className="w-full py-4 bg-destructive/10 text-destructive rounded-xl font-medium border border-destructive/20 disabled:opacity-50"
             >
               Reject Order
             </button>
           </div>
         )}
-        {nextStatus && order.status !== 'Pending' && (
+
+        {nextStatus && order.status !== 'Paid' && (
           <button
-            onClick={handleProgress}
-            className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow"
+            onClick={() => void handleStatusUpdate(nextStatus)}
+            disabled={isUpdating}
+            className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-medium btn-glow disabled:opacity-50"
           >
-            Mark as {nextStatus === 'Processing' ? 'Processing' : nextStatus === 'PickupScheduled' ? 'Pickup Scheduled' : nextStatus === 'InTransit' ? 'In Transit' : 'Delivered'}
+            {isUpdating ? 'Saving...' : nextStatus === 'Processing' ? 'Mark as Preparing' : 'Mark as Out for Delivery'}
           </button>
+        )}
+
+        {order.status === 'InTransit' && (
+          <div className="farm-card bg-farm-info/10 border-farm-info/20">
+            <div className="flex items-center gap-2">
+              <Flag className="w-4 h-4 text-farm-info" />
+              <p className="text-sm text-foreground">Waiting for buyer to confirm delivery.</p>
+            </div>
+          </div>
         )}
       </div>
     </FarmerLayout>

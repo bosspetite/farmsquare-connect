@@ -7,16 +7,48 @@ import { FileUploader } from '@/components/ui/FileUploader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
-import { getKYCByUserId, updateKYCData, updateKYCStatus } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 import { KYCData } from '@/types';
+import { getMyKyc, resetKycRecord, submitKyc } from '@/services/kycService';
 
 const steps = [
   { label: 'Business Info', description: 'Company details' },
   { label: 'Identity', description: 'ID verification' },
   { label: 'Review', description: 'Submit for review' }
 ];
+
+const getKycSubmissionMessage = (error: unknown) => {
+  const messageText =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : null;
+
+  if (!messageText) {
+    return 'Your verification could not be submitted. Please check all required fields and try again.';
+  }
+
+  const message = messageText.toLowerCase();
+  if (message.includes('profile not found')) {
+    return 'We could not find your account profile. Please sign out and sign in again, then retry.';
+  }
+
+  if (message.includes('auth') || message.includes('session')) {
+    return 'Your session has expired. Please sign in again and retry your verification.';
+  }
+
+  if (message.includes('upload') || message.includes('document')) {
+    return 'Your verification could not be submitted because one or more documents could not be processed. Please try again.';
+  }
+
+  if (message.includes('permission') || message.includes('row-level security')) {
+    return 'Your verification could not be submitted right now. Please try again in a moment.';
+  }
+
+  return messageText || 'Your verification could not be submitted. Please check all required fields and try again.';
+};
 
 const BuyerKYC = () => {
   const navigate = useNavigate();
@@ -39,57 +71,66 @@ const BuyerKYC = () => {
     idNumber: '',
   });
   
-  const [idDocumentFile, setIdDocumentFile] = useState<string[]>([]);
   const [businessDocumentFile, setBusinessDocumentFile] = useState<string[]>([]);
   const [authorizedRepresentativeIdFile, setAuthorizedRepresentativeIdFile] = useState<string[]>([]);
+  const [businessDocumentFileObjects, setBusinessDocumentFileObjects] = useState<File[]>([]);
+  const [authorizedRepresentativeIdFileObjects, setAuthorizedRepresentativeIdFileObjects] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Load KYC data when component mounts
   useEffect(() => {
     if (user) {
-      try {
-        const data = getKYCByUserId(user.id);
-        setKycData(data);
-        
-        // Load existing data if available
-        if (data) {
-          setFormData({
-            businessName: data.businessName || '',
-            businessType: data.businessType || '',
-            businessRegistrationNumber: data.businessRegistrationNumber || '',
-            businessAddress: data.businessAddress || data.address || '',
-            businessEmail: data.businessEmail || '',
-            businessPhone: data.businessPhone || data.phoneNumber || '',
-            authorizedRepresentativeName: data.authorizedRepresentativeName || data.fullName || '',
-            authorizedRepresentativeRole: data.authorizedRepresentativeRole || '',
-            idType: data.idType || '',
-            idNumber: data.idNumber || '',
-          });
-          
-          if (data.idDocumentFile) setIdDocumentFile([data.idDocumentFile]);
-          if (data.businessDocumentFile) setBusinessDocumentFile([data.businessDocumentFile]);
-          if (data.authorizedRepresentativeIdFile) setAuthorizedRepresentativeIdFile([data.authorizedRepresentativeIdFile]);
-          
-          // Set step based on status
-          if (data.status === 'APPROVED') {
-            setStep(2);
-          } else if (data.status === 'IN_REVIEW') {
-            setStep(2);
-          } else if (data.status === 'REJECTED') {
-            setStep(0);
+      void (async () => {
+        try {
+          const data = await getMyKyc(user.id);
+          setKycData(data);
+
+          if (data) {
+            setFormData({
+              businessName: data.businessName || '',
+              businessType: data.businessType || '',
+              businessRegistrationNumber: data.businessRegistrationNumber || '',
+              businessAddress: data.businessAddress || data.address || '',
+              businessEmail: data.businessEmail || user.email || '',
+              businessPhone: data.businessPhone || data.phoneNumber || user.phone || '',
+              authorizedRepresentativeName: data.authorizedRepresentativeName || data.fullName || user.name || '',
+              authorizedRepresentativeRole: data.authorizedRepresentativeRole || '',
+              idType: data.idType || '',
+              idNumber: data.idNumber || '',
+            });
+
+            if (data.businessDocumentFile) setBusinessDocumentFile([data.businessDocumentFile]);
+            if (data.authorizedRepresentativeIdFile) setAuthorizedRepresentativeIdFile([data.authorizedRepresentativeIdFile]);
+
+            if (data.status === 'APPROVED' || data.status === 'PENDING') {
+              setStep(2);
+            } else if (data.status === 'REJECTED') {
+              setStep(0);
+            }
+          } else {
+            setFormData((prev) => ({
+              ...prev,
+              businessPhone: user.phone || '',
+              authorizedRepresentativeName: user.name || '',
+            }));
           }
-        } else {
-          // Pre-fill with user data
-          setFormData(prev => ({
+        } catch (error) {
+          console.error('Error loading KYC data:', error);
+          setFormData((prev) => ({
             ...prev,
-            businessPhone: user.phone || '',
-            authorizedRepresentativeName: user.name || '',
+            businessPhone: user.phone || prev.businessPhone,
+            authorizedRepresentativeName: user.name || prev.authorizedRepresentativeName,
+            businessEmail: user.email || prev.businessEmail,
           }));
+          toast({
+            title: 'Could not load saved verification details',
+            description: 'You can still continue and submit your verification.',
+            variant: 'destructive',
+          });
         }
-      } catch (error) {
-        console.error('Error loading KYC data:', error);
-      }
+      })();
     }
-  }, [user]);
+  }, [user, toast]);
 
   const updateFormField = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -166,78 +207,138 @@ const BuyerKYC = () => {
   };
 
   const handleSubmit = () => {
-    if (!user) return;
-    
-    if (!validateStep1() || !validateStep2()) {
-      setStep(0);
+    if (!user) {
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in again before submitting your verification.',
+        variant: 'destructive',
+      });
       return;
     }
     
-    try {
-      // Update KYC data with all information including business data
-      // This function already updates buyer.kycStatus, so we don't need updateKYCStatus
-      updateKYCData(user.id, {
-        ...formData,
-        idType: formData.idType as 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD',
-        idDocumentFile: authorizedRepresentativeIdFile[0],
-        businessDocumentFile: businessDocumentFile[0],
-        businessName: formData.businessName,
-        businessType: formData.businessType as 'INDIVIDUAL' | 'COMPANY' | 'PARTNERSHIP',
-        businessRegistrationNumber: formData.businessRegistrationNumber,
-        businessAddress: formData.businessAddress,
-        businessEmail: formData.businessEmail,
-        businessPhone: formData.businessPhone,
-        authorizedRepresentativeName: formData.authorizedRepresentativeName,
-        authorizedRepresentativeRole: formData.authorizedRepresentativeRole,
-        authorizedRepresentativeIdFile: authorizedRepresentativeIdFile[0],
-        status: 'IN_REVIEW',
-        submittedAt: new Date().toISOString(),
+    if (!validateStep1()) {
+      console.warn('[BuyerKYC] Step 1 validation failed', {
+        businessNamePresent: Boolean(formData.businessName.trim()),
+        businessTypePresent: Boolean(formData.businessType),
+        businessRegistrationNumberPresent: Boolean(formData.businessRegistrationNumber.trim()),
+        businessAddressPresent: Boolean(formData.businessAddress.trim()),
+        businessEmailPresent: Boolean(formData.businessEmail.trim()),
+        businessPhonePresent: Boolean(formData.businessPhone.trim()),
+        representativeNamePresent: Boolean(formData.authorizedRepresentativeName.trim()),
+        representativeRolePresent: Boolean(formData.authorizedRepresentativeRole.trim()),
       });
-      
-      // Refresh the data to show updated status
-      const updatedData = getKYCByUserId(user.id);
-      setKycData(updatedData);
-      setStep(2); // Move to review step
-      
-      toast({ 
-        title: 'Verification submitted for review', 
-        description: 'Your documents are being verified. This usually takes 24-48 hours.' 
-      });
-      
-      // Redirect to dashboard after submission
-      setTimeout(() => {
-        navigate('/buyer/dashboard');
-      }, 1500);
-    } catch (error) {
-      console.error('Error submitting KYC:', error);
-      toast({ 
-        title: 'Error', 
-        description: 'Failed to submit verification. Please try again.',
-        variant: 'destructive' 
-      });
+      setStep(0);
+      return;
     }
+
+    if (!validateStep2()) {
+      console.warn('[BuyerKYC] Step 2 validation failed', {
+        idTypePresent: Boolean(formData.idType),
+        idNumberPresent: Boolean(formData.idNumber.trim()),
+        representativeDocumentPresent: authorizedRepresentativeIdFile.length > 0,
+        businessDocumentPresent: businessDocumentFile.length > 0,
+      });
+      setStep(1);
+      return;
+    }
+    
+    void (async () => {
+      try {
+        setIsSubmitting(true);
+        console.log('[BuyerKYC] Submitting verification', {
+          userId: user.id,
+          role: user.role,
+          sessionEmail: user.email,
+          validation: {
+            businessNamePresent: Boolean(formData.businessName.trim()),
+            businessTypePresent: Boolean(formData.businessType),
+            businessRegistrationNumberPresent: Boolean(formData.businessRegistrationNumber.trim()),
+            businessAddressPresent: Boolean(formData.businessAddress.trim()),
+            businessEmailPresent: Boolean(formData.businessEmail.trim()),
+            businessPhonePresent: Boolean(formData.businessPhone.trim()),
+            representativeNamePresent: Boolean(formData.authorizedRepresentativeName.trim()),
+            representativeRolePresent: Boolean(formData.authorizedRepresentativeRole.trim()),
+            idTypePresent: Boolean(formData.idType),
+            idNumberPresent: Boolean(formData.idNumber.trim()),
+            representativeDocumentPathPresent: Boolean(authorizedRepresentativeIdFile[0]),
+            businessDocumentPathPresent: Boolean(businessDocumentFile[0]),
+            representativeDocumentObjectPresent: Boolean(authorizedRepresentativeIdFileObjects[0]),
+            businessDocumentObjectPresent: Boolean(businessDocumentFileObjects[0]),
+          },
+        });
+        const updatedData = await submitKyc(user.id, {
+          ...formData,
+          idType: formData.idType as 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD',
+          businessName: formData.businessName,
+          businessType: formData.businessType as 'INDIVIDUAL' | 'COMPANY' | 'PARTNERSHIP',
+          businessRegistrationNumber: formData.businessRegistrationNumber,
+          businessAddress: formData.businessAddress,
+          businessEmail: formData.businessEmail,
+          businessPhone: formData.businessPhone,
+          authorizedRepresentativeName: formData.authorizedRepresentativeName,
+          authorizedRepresentativeRole: formData.authorizedRepresentativeRole,
+          authorizedRepresentativeIdFile: authorizedRepresentativeIdFile[0],
+          businessDocumentFile: businessDocumentFile[0],
+          submittedAt: new Date().toISOString(),
+        }, {
+          authorizedRepresentativeIdFile: authorizedRepresentativeIdFileObjects[0],
+          businessDocumentFile: businessDocumentFileObjects[0],
+        });
+
+        console.log('[BuyerKYC] Verification submitted successfully', {
+          userId: user.id,
+          status: updatedData.status,
+          recordId: updatedData.recordId,
+        });
+        setKycData(updatedData);
+        setStep(2);
+
+        toast({
+          title: 'Verification submitted for review',
+          description: 'Your documents are being verified. This usually takes 24-48 hours.',
+        });
+
+        setTimeout(() => {
+          navigate('/buyer/dashboard');
+        }, 1500);
+      } catch (error) {
+        console.error('Error submitting KYC:', error);
+        toast({
+          title: 'Submission failed',
+          description: getKycSubmissionMessage(error),
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
   };
 
   const handleResubmit = () => {
     if (!user) return;
     
-    // Reset to start fresh
-    updateKYCData(user.id, {
-      status: 'NOT_STARTED',
-    });
-    
-    setIdDocumentFile([]);
-    setBusinessDocumentFile([]);
-    setAuthorizedRepresentativeIdFile([]);
-    setStep(0);
-    
-    const updatedData = getKYCByUserId(user.id);
-    setKycData(updatedData);
+    void (async () => {
+      try {
+        setIsSubmitting(true);
+        const updatedData = await resetKycRecord(user.id, 'buyer');
+        setBusinessDocumentFile([]);
+        setAuthorizedRepresentativeIdFile([]);
+        setBusinessDocumentFileObjects([]);
+        setAuthorizedRepresentativeIdFileObjects([]);
+        setStep(0);
+        setKycData(updatedData);
+      } catch (error) {
+        console.error('Error resetting verification:', error);
+        toast({ title: 'Could not reset verification', variant: 'destructive' });
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
   };
 
   const isApproved = kycData?.status === 'APPROVED';
   const isRejected = kycData?.status === 'REJECTED';
-  const isInReview = kycData?.status === 'IN_REVIEW';
+  const isInReview = kycData?.status === 'PENDING' || kycData?.status === 'IN_REVIEW';
   const isNotStarted = !kycData || kycData.status === 'NOT_STARTED';
 
   return (
@@ -440,7 +541,9 @@ const BuyerKYC = () => {
                     <FileUploader 
                       files={authorizedRepresentativeIdFile} 
                       onFilesChange={setAuthorizedRepresentativeIdFile} 
-                      maxFiles={1}
+                      fileObjects={authorizedRepresentativeIdFileObjects}
+                      onFileObjectsChange={setAuthorizedRepresentativeIdFileObjects}
+                      maxFiles={1} 
                       accept="image/*,.pdf"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Upload a clear photo or scan of the authorized representative's government ID</p>
@@ -451,6 +554,8 @@ const BuyerKYC = () => {
                     <FileUploader 
                       files={businessDocumentFile} 
                       onFilesChange={setBusinessDocumentFile} 
+                      fileObjects={businessDocumentFileObjects}
+                      onFileObjectsChange={setBusinessDocumentFileObjects}
                       maxFiles={1}
                       accept="image/*,.pdf"
                     />
@@ -554,9 +659,10 @@ const BuyerKYC = () => {
               ) : (
                 <button
                   onClick={handleSubmit}
+                  disabled={isSubmitting}
                   className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium"
                 >
-                  Submit for Review
+                  {isSubmitting ? 'Submitting...' : 'Submit for Review'}
                 </button>
               )}
             </div>
@@ -568,12 +674,3 @@ const BuyerKYC = () => {
 };
 
 export default BuyerKYC;
-
-
-
-
-
-
-
-
-

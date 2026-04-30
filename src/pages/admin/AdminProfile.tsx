@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { User, Lock, Phone, MapPin, Key, Shield, AlertCircle } from 'lucide-react';
 import { AdminLayout } from '@/components/layouts/AdminLayout';
 import { Modal } from '@/components/ui/Modal';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 
 const AdminProfile = () => {
@@ -280,7 +280,6 @@ const AdminProfile = () => {
 };
 
 export default AdminProfile;
-
 
 
 

@@ -1,25 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
-  Store, 
-  ShoppingCart, 
+import {
+  LayoutDashboard,
+  Store,
+  ShoppingCart,
   FileText,
   Menu,
-  Bell,
   LogOut,
   X,
-  Package,
-  Shield,
-  Wallet,
-  CheckCircle,
-  Settings
+  Settings,
 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { getAppState, getOrdersByBuyerId } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
 import { SignOutModal } from '@/components/ui/SignOutModal';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { AppNotification } from '@/types';
+import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead } from '@/services/notificationService';
 
 interface BuyerLayoutProps {
   children: React.ReactNode;
@@ -37,133 +34,109 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [notificationOpen, setNotificationOpen] = React.useState(false);
   const [showSignOutModal, setShowSignOutModal] = React.useState(false);
-  const [notifications, setNotifications] = React.useState<Array<{
-    id: string;
-    type: 'order' | 'payment' | 'kyc' | 'delivery';
-    title: string;
-    message: string;
-    timestamp: string;
-    read: boolean;
-    link?: string;
-  }>>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
-  // Generate notifications
   useEffect(() => {
-    if (!user) return;
-    
-    const state = getAppState();
-    const orders = getOrdersByBuyerId(user.id);
-    const newNotifications: typeof notifications = [];
-    
-    // Check for new orders
-    const recentOrders = orders.filter(o => {
-      const orderDate = new Date(o.createdAt);
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      return orderDate > oneDayAgo;
-    });
-    
-    if (recentOrders.length > 0) {
-      newNotifications.push({
-        id: 'new_orders',
-        type: 'order',
-        title: `${recentOrders.length} New Order${recentOrders.length > 1 ? 's' : ''} Placed`,
-        message: `You placed ${recentOrders.length} order${recentOrders.length > 1 ? 's' : ''} recently`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/buyer/orders'
-      });
-    }
+    let active = true;
 
-    // Check for order status updates
-    const pendingOrders = orders.filter(o => o.status === 'Pending');
-    if (pendingOrders.length > 0) {
-      newNotifications.push({
-        id: 'pending_orders',
-        type: 'order',
-        title: `${pendingOrders.length} Order${pendingOrders.length > 1 ? 's' : ''} Awaiting Farmer Response`,
-        message: `${pendingOrders.length} order${pendingOrders.length > 1 ? 's' : ''} pending farmer acceptance`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/buyer/orders'
-      });
-    }
-
-    // Check for accepted orders (ready for pickup)
-    const acceptedOrders = orders.filter(o => o.status === 'Accepted');
-    if (acceptedOrders.length > 0) {
-      newNotifications.push({
-        id: 'accepted_orders_ready',
-        type: 'order',
-        title: `${acceptedOrders.length} Order${acceptedOrders.length > 1 ? 's' : ''} Ready`,
-        message: `Your order${acceptedOrders.length > 1 ? 's' : ''} ${acceptedOrders.length > 1 ? 'are' : 'is'} ready for pickup`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/buyer/orders'
-      });
-    }
-
-    // Check for delivered orders
-    const deliveredOrders = orders.filter(o => o.status === 'Delivered');
-    if (deliveredOrders.length > 0) {
-      newNotifications.push({
-        id: 'delivered_orders',
-        type: 'delivery',
-        title: `${deliveredOrders.length} Order${deliveredOrders.length > 1 ? 's' : ''} Delivered`,
-        message: `Please confirm delivery to release payment`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/buyer/orders'
-      });
-    }
-
-    // Check KYC status
-    const kycData = state.kycData.find(k => k.userId === user.id);
-    if (kycData) {
-      if (kycData.status === 'APPROVED') {
-        newNotifications.push({
-          id: 'kyc_approved',
-          type: 'kyc',
-          title: 'Verification Approved',
-          message: 'Your KYC/KYB verification has been approved',
-          timestamp: kycData.submittedAt || new Date().toISOString(),
-          read: false,
-        });
-      } else if (kycData.status === 'REJECTED') {
-        newNotifications.push({
-          id: 'kyc_rejected',
-          type: 'kyc',
-          title: 'Verification Rejected',
-          message: 'Please review and resubmit your verification documents',
-          timestamp: kycData.submittedAt || new Date().toISOString(),
-          read: false,
-          link: '/buyer/kyc'
-        });
+    const loadNotifications = async () => {
+      try {
+        setNotificationLoading(true);
+        setNotificationError(null);
+        const nextNotifications = await getNotificationsForUser(user?.id, user?.role);
+        if (!active) {
+          return;
+        }
+        setNotifications(nextNotifications);
+      } catch (error) {
+        console.error('[BuyerLayout] Failed to load notifications', error);
+        if (active) {
+          setNotifications([]);
+          setNotificationError(error instanceof Error ? error.message : 'Failed to load notifications.');
+        }
+      } finally {
+        if (active) {
+          setNotificationLoading(false);
+        }
       }
+    };
+
+    if (user?.role === 'buyer') {
+      void loadNotifications();
+    } else {
+      setNotifications([]);
+      setNotificationLoading(false);
+      setNotificationError(null);
     }
 
-    setNotifications(newNotifications);
-  }, [location.pathname, user]);
+    return () => {
+      active = false;
+    };
+  }, [location.pathname, user?.id, user?.role]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
-  const handleNotificationClick = (notification: typeof notifications[0]) => {
-    if (notification.link) {
-      navigate(notification.link);
-      setNotificationOpen(false);
+  const handleNotificationClick = async (notification: AppNotification) => {
+    try {
+      if (!notification.isRead) {
+        await markNotificationRead(notification.id);
+        setNotifications((current) =>
+          current.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+        );
+      }
+
+      if (notification.type.startsWith('KYC_')) {
+        navigate('/buyer/kyc');
+        return;
+      }
+
+      if (notification.entityType === 'order' || notification.type.includes('ORDER')) {
+        navigate('/buyer/orders');
+        return;
+      }
+
+      if (notification.type.includes('PAY') || notification.entityType === 'wallet') {
+        navigate('/buyer/orders');
+      }
+    } catch (error) {
+      console.error('[BuyerLayout] Failed to open notification', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to open notification.');
+    }
+  };
+
+  const handleMarkNotificationRead = async (notification: AppNotification) => {
+    try {
+      await markNotificationRead(notification.id);
+      setNotifications((current) =>
+        current.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+      );
+    } catch (error) {
+      console.error('[BuyerLayout] Failed to mark notification as read', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to update notification.');
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await markAllNotificationsRead(user?.id, user?.role);
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+    } catch (error) {
+      console.error('[BuyerLayout] Failed to mark all notifications as read', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to update notifications.');
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-1 bg-card border-r border-border">
           <div className="px-6 py-5 border-b border-border">
-            <button 
+            <button
               onClick={() => navigate('/buyer/dashboard')}
               className="flex items-center gap-3 mb-1 hover:opacity-80 transition-opacity w-full text-left"
             >
@@ -172,7 +145,7 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
             </button>
             <p className="text-xs text-muted-foreground ml-13">Buyer</p>
           </div>
-          
+
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navItems.map((item) => (
               <Link
@@ -190,7 +163,7 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
               </Link>
             ))}
           </nav>
-          
+
           <div className="p-4 border-t border-border mt-auto">
             <button
               onClick={() => setShowSignOutModal(true)}
@@ -203,16 +176,12 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
         </div>
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setSidebarOpen(false)}
-          />
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border animate-slide-in-right flex flex-col">
             <div className="flex items-center justify-between px-6 py-5 border-b border-border flex-shrink-0">
-              <button 
+              <button
                 onClick={() => {
                   navigate('/buyer/dashboard');
                   setSidebarOpen(false);
@@ -229,7 +198,7 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            
+
             <nav className="px-4 py-6 space-y-2 flex-1 overflow-y-auto pb-20">
               {navItems.map((item) => (
                 <Link
@@ -248,7 +217,7 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
                 </Link>
               ))}
             </nav>
-            
+
             <div className="p-4 border-t border-border bg-card sticky bottom-0 z-10 flex-shrink-0">
               <button
                 onClick={() => setShowSignOutModal(true)}
@@ -262,9 +231,7 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
         </div>
       )}
 
-      {/* Main Content */}
       <div className="lg:pl-64">
-        {/* Top Bar */}
         <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-4 bg-background/95 backdrop-blur-sm border-b border-border lg:px-8">
           <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
             <button
@@ -274,7 +241,7 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
             >
               <Menu className="w-5 h-5 text-foreground" />
             </button>
-            <button 
+            <button
               onClick={() => navigate('/buyer/dashboard')}
               className="lg:hidden flex items-center gap-2 flex-shrink-0 hover:opacity-80 transition-opacity"
             >
@@ -286,92 +253,25 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="relative">
-              <button 
-                onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5 text-foreground" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-primary text-white rounded-full text-xs font-bold flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-              
-              {/* Notification Dropdown */}
-              {notificationOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setNotificationOpen(false)}
-                  />
-                  <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-border flex items-center justify-between">
-                      <h3 className="font-semibold text-foreground">Notifications</h3>
-                      {unreadCount > 0 && (
-                        <span className="text-xs text-muted-foreground">{unreadCount} new</span>
-                      )}
-                    </div>
-                    <div className="overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-8 text-center">
-                          <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                          <p className="text-sm text-muted-foreground">No notifications</p>
-                        </div>
-                      ) : (
-                        notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            onClick={() => handleNotificationClick(notification)}
-                            className={cn(
-                              "w-full p-4 text-left border-b border-border hover:bg-muted/50 transition-colors",
-                              !notification.read && "bg-primary/5"
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                                notification.type === 'order' && "bg-farm-info/10",
-                                notification.type === 'payment' && "bg-farm-success/10",
-                                notification.type === 'kyc' && "bg-farm-warning/10",
-                                notification.type === 'delivery' && "bg-primary/10"
-                              )}>
-                                {notification.type === 'order' && <Package className="w-5 h-5 text-farm-info" />}
-                                {notification.type === 'payment' && <Wallet className="w-5 h-5 text-farm-success" />}
-                                {notification.type === 'kyc' && <Shield className="w-5 h-5 text-farm-warning" />}
-                                {notification.type === 'delivery' && <CheckCircle className="w-5 h-5 text-primary" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-foreground text-sm mb-1">{notification.title}</p>
-                                <p className="text-xs text-muted-foreground line-clamp-2">{notification.message}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {new Date(notification.timestamp).toLocaleDateString()}
-                                </p>
-                              </div>
-                              {!notification.read && (
-                                <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
-                              )}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            <button 
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              loading={notificationLoading}
+              errorMessage={notificationError}
+              onNotificationClick={(notification) => void handleNotificationClick(notification)}
+              onMarkRead={(notification) => void handleMarkNotificationRead(notification)}
+              onMarkAllRead={() => void handleMarkAllNotificationsRead()}
+            />
+            <button
               onClick={() => navigate('/buyer/profile')}
               className="w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
               aria-label="Settings"
             >
               <Settings className="w-5 h-5 text-foreground" />
             </button>
-            <button 
+            <button
               onClick={() => setShowSignOutModal(true)}
               className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors border border-destructive/20 flex-shrink-0"
               title="Sign Out"
@@ -382,21 +282,16 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
           </div>
         </header>
 
-        {/* Sign Out Modal */}
         <SignOutModal
           isOpen={showSignOutModal}
           onClose={() => setShowSignOutModal(false)}
-          onConfirm={() => {
-            logout();
-            window.location.href = '/';
+          onConfirm={async () => {
+            await logout();
           }}
           userName={user?.name}
         />
 
-        {/* Page Content */}
-        <main className="px-4 py-6 lg:px-8 pb-8">
-          {children}
-        </main>
+        <main className="px-4 py-6 lg:px-8 pb-8">{children}</main>
       </div>
     </div>
   );

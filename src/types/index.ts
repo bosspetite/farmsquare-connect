@@ -2,18 +2,19 @@
 
 export type UserRole = 'farmer' | 'buyer' | 'agent' | 'admin';
 
-export type KYCStatus = 'NOT_STARTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
+export type KYCStatus = 'NOT_STARTED' | 'PENDING' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
 
 export type ListingStatus = 'Draft' | 'Active' | 'Paused' | 'SoldOut' | 'Sold' | 'Archived';
 
-export type OrderStatus = 'Pending' | 'Paid' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Cancelled' | 'Refunded';
+export type OrderStatus = 'Pending' | 'Paid' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Disputed' | 'Cancelled' | 'Refunded';
 export type PaymentStatus = 'Unpaid' | 'Paid' | 'Escrowed' | 'Released' | 'Refunded';
 
 export type GradeType = 'A' | 'B' | 'C';
+export type ProductImageSource = 'upload' | 'library';
 
 export type WithdrawalStatus = 'Submitted' | 'InReview' | 'Paid' | 'Rejected';
 
-export type TransactionType = 'Credit' | 'Debit' | 'fund' | 'payment' | 'release' | 'withdrawal' | 'refund' | 'commission';
+export type TransactionType = 'Credit' | 'Debit' | 'fund' | 'payment' | 'release' | 'withdrawal' | 'refund' | 'commission' | 'escrow_hold' | 'escrow_release' | 'adjustment';
 export type TransactionStatus = 'pending' | 'completed' | 'failed';
 
 export type DisputeStatus = 'Open' | 'UnderReview' | 'Resolved' | 'Closed';
@@ -23,6 +24,7 @@ export type DisputeType = 'quality' | 'quantity' | 'delivery' | 'payment' | 'oth
 export interface User {
   id: string;
   name: string;
+  email?: string;
   phone: string;
   role: UserRole;
   region: string;
@@ -54,7 +56,7 @@ export interface Wallet {
   available: number; // Available balance (can be used immediately)
   pending: number; // Pending balance (awaiting release)
   locked: number; // Locked balance (in escrow for active orders)
-  currency: '₦';
+  currency: string;
   withdrawn?: number; // Total withdrawn amount (for farmers)
 }
 
@@ -68,10 +70,27 @@ export interface Listing {
   pricePerKg: number;
   minOrderKg?: number; // Minimum order quantity in kg
   photos: string[];
+  photoPaths?: string[];
+  photoSource?: ProductImageSource;
+  libraryImageId?: string;
   locationLabel: string;
   region: string;
   status: ListingStatus;
+  description?: string;
   createdAt: string;
+}
+
+export interface ProductImageLibraryItem {
+  id: string;
+  name: string;
+  category?: string;
+  imageUrl: string;
+  imagePath?: string;
+  storageBucket: string;
+  createdBy?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OrderEvidence {
@@ -105,6 +124,9 @@ export interface Order {
   farmerName: string;
   listingId: string;
   commodity: string;
+  grade?: GradeType;
+  listingRegion?: string;
+  listingPhotos?: string[];
   quantityKg: number;
   pricePerKg: number;
   amount: number;
@@ -158,9 +180,13 @@ export interface MarketPriceIntel {
 }
 
 export interface KYCData {
+  recordId?: string;
   userId: string;
+  userRole?: UserRole;
   status: KYCStatus;
   submittedAt?: string;
+  reviewedAt?: string;
+  primaryDocumentUrl?: string;
   rejectionReason?: string; // Reason for rejection if status is REJECTED
   // Personal Information (for Farmers - KYC)
   fullName?: string;
@@ -184,6 +210,19 @@ export interface KYCData {
   authorizedRepresentativeName?: string; // Full Name
   authorizedRepresentativeRole?: string; // Role in Business
   authorizedRepresentativeIdFile?: string; // Government ID upload
+}
+
+export interface AppNotification {
+  id: string;
+  recipientRole?: UserRole | null;
+  recipientUserId?: string | null;
+  type: string;
+  title: string;
+  message: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface Dispute {

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Truck, Shield, TrendingUp, Users, ChevronRight, Package, ChevronLeft, CheckCircle2, Quote } from 'lucide-react';
-import logo from '@/assets/logo.png';
-import farmProduceImg from '@/assets/agricultural farm produce.jpg';
-import farmersTomatoesImg from '@/assets/farmers with tomatoes.jpg';
-import maizeFarmImg from '@/assets/maize farm nigeria.jpg';
-import tomatoCrateImg from '@/assets/tomota crate market.jpg';
-import pexelsFarmImg from '@/assets/pexels-nc-farm-bureau-mark-9798867.jpg';
+import logo from '@/assets/logo-web.png';
+import farmProduceImg from '@/assets/agricultural-farm-produce-web.jpg';
+import farmersTomatoesImg from '@/assets/farmers-with-tomatoes-web.jpg';
+import maizeFarmImg from '@/assets/maize-farm-nigeria-web.jpg';
+import tomatoCrateImg from '@/assets/tomato-crate-market-web.jpg';
+import pexelsFarmImg from '@/assets/pexels-farm-web.jpg';
 
 // TODO: Add 3 more beautiful farm produce images to the assets folder
 // 
@@ -32,52 +32,95 @@ import pexelsFarmImg from '@/assets/pexels-nc-farm-bureau-mark-9798867.jpg';
 // 
 // After adding images to src/assets/, update the carouselImages array below to use the new images
 
+const carouselImages = [
+  {
+    image: farmProduceImg,
+    title: 'Fresh Farm Produce',
+    subtitle: 'Quality-graded agricultural products'
+  },
+  {
+    image: farmersTomatoesImg,
+    title: 'Fresh Tomatoes',
+    subtitle: 'Direct from Nigerian farms'
+  },
+  {
+    image: maizeFarmImg,
+    title: 'Premium Maize',
+    subtitle: 'Harvested at peak freshness'
+  },
+  {
+    image: tomatoCrateImg,
+    title: 'Market Ready',
+    subtitle: 'Carefully packed and graded'
+  },
+  {
+    image: pexelsFarmImg,
+    title: 'Farm Fresh',
+    subtitle: 'Connecting farmers and buyers'
+  },
+  {
+    image: farmProduceImg,
+    title: 'Fresh Peppers & Onions',
+    subtitle: 'Colorful, vibrant produce from local farms'
+  },
+  {
+    image: maizeFarmImg,
+    title: 'Premium Grains',
+    subtitle: 'Golden harvests ready for market'
+  },
+  {
+    image: farmersTomatoesImg,
+    title: 'Farm Vegetables',
+    subtitle: 'Fresh, organic vegetables daily'
+  },
+];
+
+const featuredProduce = [
+  {
+    image: farmersTomatoesImg,
+    name: 'Fresh Tomatoes',
+    label: 'Available in bulk',
+    grade: 'Grade A'
+  },
+  {
+    image: maizeFarmImg,
+    name: 'Maize',
+    label: 'Fresh from farmers',
+    grade: 'Grade A'
+  },
+  {
+    image: tomatoCrateImg,
+    name: 'Tomato Crates',
+    label: 'Market ready',
+    grade: 'Grade B'
+  },
+  {
+    image: farmProduceImg,
+    name: 'Mixed Vegetables',
+    label: 'Farm fresh',
+    grade: 'Grade A'
+  },
+  {
+    image: pexelsFarmImg,
+    name: 'Farm Produce',
+    label: 'Quality assured',
+    grade: 'Grade A'
+  },
+];
+
+const getVisibleSlideIndexes = (currentIndex: number) => {
+  const totalSlides = carouselImages.length;
+
+  return new Set([
+    currentIndex,
+    (currentIndex - 1 + totalSlides) % totalSlides,
+    (currentIndex + 1) % totalSlides,
+  ]);
+};
+
 const LandingPage = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
-  
-  const carouselImages = [
-    {
-      image: farmProduceImg,
-      title: 'Fresh Farm Produce',
-      subtitle: 'Quality-graded agricultural products'
-    },
-    {
-      image: farmersTomatoesImg,
-      title: 'Fresh Tomatoes',
-      subtitle: 'Direct from Nigerian farms'
-    },
-    {
-      image: maizeFarmImg,
-      title: 'Premium Maize',
-      subtitle: 'Harvested at peak freshness'
-    },
-    {
-      image: tomatoCrateImg,
-      title: 'Market Ready',
-      subtitle: 'Carefully packed and graded'
-    },
-    {
-      image: pexelsFarmImg,
-      title: 'Farm Fresh',
-      subtitle: 'Connecting farmers and buyers'
-    },
-    // Using existing images temporarily - Replace with new images when available
-    {
-      image: farmProduceImg, // TODO: Replace with fresh-peppers-onions.jpg
-      title: 'Fresh Peppers & Onions',
-      subtitle: 'Colorful, vibrant produce from local farms'
-    },
-    {
-      image: maizeFarmImg, // TODO: Replace with grains-harvest.jpg
-      title: 'Premium Grains',
-      subtitle: 'Golden harvests ready for market'
-    },
-    {
-      image: farmersTomatoesImg, // TODO: Replace with vegetables-market.jpg
-      title: 'Farm Vegetables',
-      subtitle: 'Fresh, organic vegetables daily'
-    },
-  ];
+  const visibleSlideIndexes = getVisibleSlideIndexes(currentSlide);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -85,7 +128,7 @@ const LandingPage = () => {
     }, 5000); // Auto-slide every 5 seconds
 
     return () => clearInterval(timer);
-  }, [carouselImages.length]);
+  }, []);
 
   const goToSlide = (index: number) => {
     setCurrentSlide(index);
@@ -105,7 +148,7 @@ const LandingPage = () => {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <img src={logo} alt="FarmSquare" className="w-10 h-10" />
+            <img src={logo} alt="FarmSquare" className="w-10 h-10" decoding="async" fetchPriority="high" />
             <span className="font-display font-bold text-xl text-gray-900">FarmSquare</span>
           </Link>
           
@@ -134,22 +177,33 @@ const LandingPage = () => {
       <section className="relative h-screen min-h-[600px] overflow-hidden">
         {/* Carousel Background Images */}
         <div className="absolute inset-0">
-          {carouselImages.map((slide, index) => (
-            <div
-              key={index}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                index === currentSlide ? 'opacity-100 z-0' : 'opacity-0 z-0'
-              }`}
-            >
-              <img
-                src={slide.image}
-                alt={slide.title}
-                className="w-full h-full object-cover"
-              />
-              {/* Dark overlay for text readability */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70"></div>
-            </div>
-          ))}
+          {carouselImages.map((slide, index) => {
+            if (!visibleSlideIndexes.has(index)) {
+              return null;
+            }
+
+            const isCurrentSlide = index === currentSlide;
+
+            return (
+              <div
+                key={index}
+                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                  isCurrentSlide ? 'opacity-100 z-0' : 'opacity-0 z-0'
+                }`}
+              >
+                <img
+                  src={slide.image}
+                  alt={slide.title}
+                  className="w-full h-full object-cover"
+                  loading={isCurrentSlide ? 'eager' : 'lazy'}
+                  decoding="async"
+                  fetchPriority={isCurrentSlide ? 'high' : 'low'}
+                />
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70"></div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Hero Content Overlay */}
@@ -269,44 +323,15 @@ const LandingPage = () => {
           </div>
           
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-5 md:gap-6">
-            {[
-              {
-                image: farmersTomatoesImg,
-                name: 'Fresh Tomatoes',
-                label: 'Available in bulk',
-                grade: 'Grade A'
-              },
-              {
-                image: maizeFarmImg,
-                name: 'Maize',
-                label: 'Fresh from farmers',
-                grade: 'Grade A'
-              },
-              {
-                image: tomatoCrateImg,
-                name: 'Tomato Crates',
-                label: 'Market ready',
-                grade: 'Grade B'
-              },
-              {
-                image: farmProduceImg,
-                name: 'Mixed Vegetables',
-                label: 'Farm fresh',
-                grade: 'Grade A'
-              },
-              {
-                image: pexelsFarmImg,
-                name: 'Farm Produce',
-                label: 'Quality assured',
-                grade: 'Grade A'
-              },
-            ].map((produce, i) => (
+            {featuredProduce.map((produce, i) => (
               <div key={i} className="bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 group">
                 <div className="relative h-48 md:h-56 overflow-hidden">
                   <img 
                     src={produce.image} 
                     alt={produce.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <div className="absolute top-3 right-3">
                     <span className="px-2.5 py-1 bg-[#22C55E] text-white text-xs font-bold rounded-full shadow-md">
@@ -795,7 +820,7 @@ const LandingPage = () => {
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <img src={logo} alt="FarmSquare" className="w-10 h-10" />
+                <img src={logo} alt="FarmSquare" className="w-10 h-10" loading="lazy" decoding="async" />
                 <span className="font-display font-bold text-lg text-gray-900">FarmSquare</span>
               </div>
               <p className="text-sm text-gray-600">

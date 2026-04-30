@@ -1,93 +1,104 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Package, TrendingUp, Clock, Store, Wallet, Shield, AlertCircle, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Package, TrendingUp, Store, Wallet, Shield, AlertCircle, CheckCircle } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { useAuth } from '@/contexts/AuthContext';
-import { getAppState, formatNaira, formatTimeAgo, getWalletByUserId, getKYCByUserId } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
+import { formatNaira, formatTimeAgo } from '@/lib/store';
 import { getProduceImage } from '@/utils/produceImages';
-import { useOrderStore } from '@/stores/orderStore';
+import { getKycRecordByUserId } from '@/services/kycService';
+import { getMarketplaceListings } from '@/services/listingService';
+import { getWalletByUserId as getWalletByUserIdFromService } from '@/services/walletService';
+import { Listing, Order, ProductImageLibraryItem } from '@/types';
+import { getActiveProductLibraryImages } from '@/services/productImageLibraryService';
+import { getBuyerOrders } from '@/services/orderService';
 
 const BuyerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  // Use Zustand store for orders - single source of truth
-  const { getBuyerOrders, refreshOrders, subscribe } = useOrderStore();
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [state, setState] = useState(getAppState());
+  const [orders, setOrders] = useState<Order[]>([]);
   const [buyerWallet, setBuyerWallet] = useState<any>(null);
   const [kycData, setKycData] = useState<any>(null);
+  const [marketplaceListings, setMarketplaceListings] = useState<Listing[]>([]);
+  const [libraryImages, setLibraryImages] = useState<ProductImageLibraryItem[]>([]);
 
-  // Get orders from Zustand store - always refresh first
-  const orders = useMemo(() => {
-    if (!user) return [];
-    // Refresh store before getting orders to ensure we have latest data
-    refreshOrders();
-    return getBuyerOrders(user.id);
-  }, [user, refreshKey, getBuyerOrders, refreshOrders]);
-
-  // Subscribe to order changes for real-time updates
+  // Refresh real Supabase-backed orders for dashboard cards.
   useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setRefreshKey(prev => prev + 1);
-    });
+    if (!user) {
+      setOrders([]);
+      return;
+    }
 
-    // Refresh on mount
-    refreshOrders();
+    const syncOrders = async () => {
+      try {
+        const orderRows = await getBuyerOrders(user.id);
+        setOrders(orderRows);
+      } catch (error) {
+        console.error('[BuyerDashboard] Failed to sync buyer orders', error);
+      }
+    };
+
+    void syncOrders();
 
     // Refresh when window gains focus
     const handleFocus = () => {
-      refreshOrders();
-      setRefreshKey(prev => prev + 1);
+      void syncOrders();
     };
     window.addEventListener('focus', handleFocus);
 
-    // Refresh when localStorage changes (cross-tab updates)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'farmsquare_state') {
-        refreshOrders();
-        setRefreshKey(prev => prev + 1);
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-
     // Refresh every 10 seconds for real-time updates
     const interval = setInterval(() => {
-      refreshOrders();
-      setRefreshKey(prev => prev + 1);
+      void syncOrders();
     }, 10000);
 
     return () => {
-      unsubscribe();
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [subscribe, refreshOrders]);
+  }, [user?.id]);
 
   // Update other state when user changes
   useEffect(() => {
     if (user) {
-      const currentState = getAppState();
-      setState(currentState);
-      setBuyerWallet(getWalletByUserId(user.id));
-      setKycData(getKYCByUserId(user.id));
+      void (async () => {
+        try {
+          const [data, wallet, liveListings, activeLibraryImages] = await Promise.all([
+            getKycRecordByUserId(user.id),
+            getWalletByUserIdFromService(user.id),
+            getMarketplaceListings(),
+            getActiveProductLibraryImages(),
+          ]);
+
+          setKycData(data);
+          setBuyerWallet(wallet);
+          setMarketplaceListings(liveListings.filter((listing) => listing.status === 'Active'));
+          setLibraryImages(activeLibraryImages);
+        } catch (error) {
+          console.error('[BuyerDashboard] Failed to load buyer dashboard data', error);
+          setKycData({ userId: user.id, status: user.kycStatus });
+          setBuyerWallet(null);
+          setMarketplaceListings([]);
+          setLibraryImages([]);
+        }
+      })();
     } else {
       setBuyerWallet(null);
       setKycData(null);
+      setMarketplaceListings([]);
+      setLibraryImages([]);
     }
-  }, [user, refreshKey]);
+  }, [user]);
 
   // Memoize calculations to prevent unnecessary recalculations
-  const activeOrders = useMemo(() => orders.filter(o => !['Delivered', 'Cancelled', 'Rejected'].includes(o.status)), [orders]);
-  const pendingOrders = useMemo(() => orders.filter(o => o.status === 'Pending'), [orders]);
+  const activeOrders = useMemo(() => orders.filter(o => !['Delivered', 'Cancelled', 'Rejected', 'Refunded'].includes(o.status)), [orders]);
   const deliveredOrders = useMemo(() => orders.filter(o => o.status === 'Delivered'), [orders]);
   const totalSpend = useMemo(() => deliveredOrders.reduce((sum, o) => sum + o.amount, 0), [deliveredOrders]);
-  const activeListings = useMemo(() => (state.listings || []).filter(l => l.status === 'Active'), [state.listings]);
+  const activeListings = useMemo(() => marketplaceListings, [marketplaceListings]);
   
   // Only verified if KYC data exists AND status is APPROVED
-  const isVerified = kycData?.status === 'APPROVED';
+  const effectiveStatus = kycData?.status || user?.kycStatus || 'NOT_STARTED';
+  const isVerified = effectiveStatus === 'APPROVED';
 
   return (
     <BuyerLayout>
@@ -107,7 +118,7 @@ const BuyerDashboard = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground">Approved • You can place orders</p>
               </div>
             </div>
-          ) : kycData?.status === 'IN_REVIEW' ? (
+          ) : effectiveStatus === 'PENDING' ? (
             <div className="farm-card bg-farm-info/10 border-farm-info/20 flex items-center gap-3 flex-1">
               <AlertCircle className="w-5 h-5 text-farm-info" />
               <div>
@@ -115,7 +126,7 @@ const BuyerDashboard = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground">Pending Review • Orders disabled until approved</p>
               </div>
             </div>
-          ) : kycData?.status === 'REJECTED' ? (
+          ) : effectiveStatus === 'REJECTED' ? (
             <div className="farm-card bg-destructive/10 border-destructive/20 flex items-center gap-3 flex-1">
               <AlertCircle className="w-5 h-5 text-destructive" />
               <div className="flex-1">
@@ -247,6 +258,11 @@ const BuyerDashboard = () => {
               ) || activeListings.find(l => 
                 l.commodity.toLowerCase() === produce.name.toLowerCase()
               );
+              const libraryImage = libraryImages.find(
+                (image) => image.name.trim().toLowerCase() === produce.name.toLowerCase()
+              );
+              const featuredImage = libraryImage?.imageUrl
+                || (listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(produce.name));
               
               return (
                 <div
@@ -262,9 +278,7 @@ const BuyerDashboard = () => {
                 >
                   <div className="relative w-full aspect-square rounded-xl bg-muted overflow-hidden mb-2 border border-border group-hover:border-primary/50 transition-all">
                     <img
-                      src={listing && listing.photos && listing.photos.length > 0 
-                        ? listing.photos[0] 
-                        : getProduceImage(produce.name)}
+                      src={featuredImage}
                       alt={produce.name}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       onError={(e) => {
@@ -359,7 +373,7 @@ const BuyerDashboard = () => {
           ) : (
             <div className="space-y-3">
               {orders.slice(0, 5).map((order) => {
-                const listing = (state.listings || []).find(l => l.id === order.listingId);
+                const listing = activeListings.find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -368,7 +382,11 @@ const BuyerDashboard = () => {
                   >
                     <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       <img 
-                        src={listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(order.commodity)} 
+                        src={order.listingPhotos && order.listingPhotos.length > 0
+                          ? order.listingPhotos[0]
+                          : listing && listing.photos && listing.photos.length > 0
+                            ? listing.photos[0]
+                            : getProduceImage(order.commodity)} 
                         alt={order.commodity} 
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -404,9 +422,10 @@ const BuyerDashboard = () => {
           <h3 className="font-display font-semibold text-foreground mb-4 text-sm sm:text-base">Quality Overview</h3>
           <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4">
             {['A', 'B', 'C'].map((grade) => {
-              const count = deliveredOrders.filter(o => 
-                (state.listings || []).find(l => l.id === o.listingId)?.grade === grade
-              ).length;
+              const count = deliveredOrders.filter((order) => {
+                const listingGrade = order.grade || activeListings.find((listing) => listing.id === order.listingId)?.grade;
+                return listingGrade === grade;
+              }).length;
               return (
                 <div key={grade} className="text-center p-4 bg-muted/50 rounded-xl">
                   <p className="text-2xl font-bold text-primary">Grade {grade}</p>

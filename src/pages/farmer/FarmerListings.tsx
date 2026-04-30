@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Filter } from 'lucide-react';
+import { AlertCircle, Plus } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
-import { useAuth } from '@/contexts/AuthContext';
-import { getListingsByFarmerId, updateListing, deleteListing, formatNaira, getAppState } from '@/lib/store';
-import { Listing, ListingStatus } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { formatNaira } from '@/lib/store';
+import { Listing, ListingStatus, Order } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { Package } from 'lucide-react';
 import { getProduceImage } from '@/utils/produceImages';
+import { deleteListing, getFarmerListings, updateListing } from '@/services/listingService';
+import { getFarmerOrders } from '@/services/orderService';
 
 const filters: ListingStatus[] = ['Draft', 'Active', 'Paused', 'SoldOut', 'Sold', 'Archived'];
 
@@ -22,36 +24,95 @@ const FarmerListings = () => {
   const [editPrice, setEditPrice] = useState('');
   const [editQuantity, setEditQuantity] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<Listing | null>(null);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isMutating, setIsMutating] = useState(false);
 
-  const allListings = user ? getListingsByFarmerId(user.id) : [];
-  const listings = activeFilter === 'All' 
-    ? allListings 
-    : allListings.filter(l => l.status === activeFilter);
-
-  const handlePauseResume = (listing: Listing) => {
-    if (listing.status === 'Active') {
-      updateListing(listing.id, { status: 'Paused' });
-      toast({ title: 'Listing paused' });
-    } else if (listing.status === 'Paused') {
-      updateListing(listing.id, { status: 'Active' });
-      toast({ title: 'Listing resumed' });
-    } else if (listing.status === 'Draft') {
-      updateListing(listing.id, { status: 'Active' });
-      toast({ title: 'Listing published' });
+  const loadListingsAndOrders = async () => {
+    if (!user) {
+      return;
     }
-    window.location.reload();
+
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const [listingRows, orderRows] = await Promise.all([
+        getFarmerListings(user.id, user.name),
+        getFarmerOrders(user.id),
+      ]);
+      setListings(listingRows);
+      setOrders(orderRows);
+    } catch (error: any) {
+      setLoadError(error?.message || 'Unable to load your listings right now.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleArchive = (listing: Listing) => {
-    updateListing(listing.id, { status: 'Archived' });
-    toast({ title: 'Listing archived' });
-    window.location.reload();
+  useEffect(() => {
+    loadListingsAndOrders();
+  }, [user?.id]);
+
+  const allListings = listings;
+  const filteredListings = useMemo(
+    () => (activeFilter === 'All' ? allListings : allListings.filter((listing) => listing.status === activeFilter)),
+    [activeFilter, allListings]
+  );
+
+  const runListingUpdate = async (listingId: string, updates: Partial<Pick<Listing, 'pricePerKg' | 'quantityKg' | 'status'>>) => {
+    try {
+      setIsMutating(true);
+      await updateListing(listingId, updates);
+      await loadListingsAndOrders();
+    } finally {
+      setIsMutating(false);
+    }
   };
 
-  const handleMarkSoldOut = (listing: Listing) => {
-    updateListing(listing.id, { status: 'SoldOut' });
-    toast({ title: 'Listing marked as sold out' });
-    window.location.reload();
+  const handlePauseResume = async (listing: Listing) => {
+    try {
+      if (listing.status === 'Active') {
+        await runListingUpdate(listing.id, { status: 'Paused' });
+        toast({ title: 'Listing paused' });
+      } else if (listing.status === 'Paused' || listing.status === 'Draft' || listing.status === 'Archived') {
+        await runListingUpdate(listing.id, { status: 'Active' });
+        toast({ title: listing.status === 'Draft' ? 'Listing published' : 'Listing resumed' });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Unable to update listing',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleArchive = async (listing: Listing) => {
+    try {
+      await runListingUpdate(listing.id, { status: 'Archived' });
+      toast({ title: 'Listing archived' });
+    } catch (error: any) {
+      toast({
+        title: 'Unable to archive listing',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleMarkSoldOut = async (listing: Listing) => {
+    try {
+      await runListingUpdate(listing.id, { status: 'SoldOut' });
+      toast({ title: 'Listing marked as sold out' });
+    } catch (error: any) {
+      toast({
+        title: 'Unable to update listing',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleEdit = (listing: Listing) => {
@@ -60,55 +121,75 @@ const FarmerListings = () => {
     setEditQuantity(listing.quantityKg.toString());
   };
 
-  const handleSaveEdit = () => {
-    if (editingListing) {
-      if (parseInt(editPrice) <= 0 || parseInt(editQuantity) <= 0) {
-        toast({ 
-          title: 'Invalid values', 
-          description: 'Price and quantity must be greater than 0',
-          variant: 'destructive'
+  const handleSaveEdit = async () => {
+    if (!editingListing) {
+      return;
+    }
+
+    if (parseInt(editPrice, 10) <= 0 || parseInt(editQuantity, 10) <= 0) {
+      toast({
+        title: 'Invalid values',
+        description: 'Price and quantity must be greater than 0',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const activeOrders = orders.filter(
+      (order) =>
+        order.listingId === editingListing.id &&
+        !['Rejected', 'Delivered', 'Cancelled', 'Refunded'].includes(order.status)
+    );
+
+    if (activeOrders.length > 0) {
+      const totalOrdered = activeOrders.reduce((sum, order) => sum + order.quantityKg, 0);
+      const newQuantity = parseInt(editQuantity, 10);
+
+      if (newQuantity < totalOrdered) {
+        toast({
+          title: 'Cannot reduce quantity',
+          description: `You have ${totalOrdered}kg in active orders. Quantity must be at least ${totalOrdered}kg.`,
+          variant: 'destructive',
         });
         return;
       }
-      
-      // Check if listing has active orders (can't reduce quantity below ordered amount)
-      const state = getAppState();
-      const activeOrders = (state.orders || []).filter(
-        o => o.listingId === editingListing.id && 
-        o.status !== 'Rejected' && 
-        o.status !== 'Delivered'
-      );
-      
-      if (activeOrders.length > 0) {
-        const totalOrdered = activeOrders.reduce((sum, o) => sum + o.quantityKg, 0);
-        const newQuantity = parseInt(editQuantity);
-        
-        if (newQuantity < totalOrdered) {
-          toast({ 
-            title: 'Cannot reduce quantity', 
-            description: `You have ${totalOrdered}kg in active orders. Quantity must be at least ${totalOrdered}kg.`,
-            variant: 'destructive'
-          });
-          return;
-        }
-      }
-      
-      updateListing(editingListing.id, {
-        pricePerKg: parseInt(editPrice),
-        quantityKg: parseInt(editQuantity),
+    }
+
+    try {
+      await runListingUpdate(editingListing.id, {
+        pricePerKg: parseInt(editPrice, 10),
+        quantityKg: parseInt(editQuantity, 10),
       });
       setEditingListing(null);
       toast({ title: 'Listing updated' });
-      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: 'Unable to update listing',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
-  
-  const handleDelete = () => {
-    if (deleteConfirm) {
-      deleteListing(deleteConfirm.id);
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) {
+      return;
+    }
+
+    try {
+      setIsMutating(true);
+      await deleteListing(deleteConfirm.id);
       setDeleteConfirm(null);
+      await loadListingsAndOrders();
       toast({ title: 'Listing deleted' });
-      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: 'Unable to delete listing',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsMutating(false);
     }
   };
 
@@ -125,7 +206,26 @@ const FarmerListings = () => {
           </button>
         </div>
 
-        {/* Filters */}
+        {loadError && (
+          <div className="farm-card bg-destructive/5 border-destructive/20">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Listings unavailable</p>
+                  <p className="text-sm text-muted-foreground">{loadError}</p>
+                </div>
+              </div>
+              <button
+                onClick={loadListingsAndOrders}
+                className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold min-h-[44px] active:scale-[0.98]"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
           <button
             onClick={() => setActiveFilter('All')}
@@ -143,13 +243,20 @@ const FarmerListings = () => {
                 activeFilter === filter ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground'
               }`}
             >
-              {filter} ({allListings.filter(l => l.status === filter).length})
+              {filter} ({allListings.filter((listing) => listing.status === filter).length})
             </button>
           ))}
         </div>
 
-        {/* Listings */}
-        {listings.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="farm-card">
+                <div className="h-24 bg-muted rounded-xl animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : filteredListings.length === 0 ? (
           <EmptyState
             icon={Package}
             title="No listings yet"
@@ -158,16 +265,16 @@ const FarmerListings = () => {
           />
         ) : (
           <div className="space-y-3">
-            {listings.map((listing) => (
+            {filteredListings.map((listing) => (
               <div key={listing.id} className="farm-card">
                 <div className="flex gap-4">
                   <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden relative">
-                    <img 
-                      src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)} 
-                      alt={listing.commodity} 
+                    <img
+                      src={listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(listing.commodity)}
+                      alt={listing.commodity}
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = getProduceImage(listing.commodity);
+                      onError={(event) => {
+                        event.currentTarget.src = getProduceImage(listing.commodity);
                       }}
                     />
                   </div>
@@ -186,7 +293,8 @@ const FarmerListings = () => {
                   {listing.status !== 'Archived' && (
                     <button
                       onClick={() => handleEdit(listing)}
-                      className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors min-h-[44px] active:scale-[0.98]"
+                      disabled={isMutating}
+                      className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
                     >
                       Edit
                     </button>
@@ -195,13 +303,15 @@ const FarmerListings = () => {
                     <>
                       <button
                         onClick={() => handlePauseResume(listing)}
-                        className="px-4 py-2.5 bg-farm-warning/10 text-farm-warning rounded-xl text-sm font-semibold hover:bg-farm-warning/20 transition-colors min-h-[44px] active:scale-[0.98]"
+                        disabled={isMutating}
+                        className="px-4 py-2.5 bg-farm-warning/10 text-farm-warning rounded-xl text-sm font-semibold hover:bg-farm-warning/20 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
                       >
                         Pause
                       </button>
                       <button
                         onClick={() => handleMarkSoldOut(listing)}
-                        className="px-4 py-2.5 bg-farm-info/10 text-farm-info rounded-xl text-sm font-semibold hover:bg-farm-info/20 transition-colors min-h-[44px] active:scale-[0.98]"
+                        disabled={isMutating}
+                        className="px-4 py-2.5 bg-farm-info/10 text-farm-info rounded-xl text-sm font-semibold hover:bg-farm-info/20 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
                       >
                         Mark Sold Out
                       </button>
@@ -210,30 +320,34 @@ const FarmerListings = () => {
                   {(listing.status === 'Paused' || listing.status === 'Draft') && (
                     <button
                       onClick={() => handlePauseResume(listing)}
-                      className="px-4 py-2.5 bg-primary/10 text-primary rounded-xl text-sm font-semibold hover:bg-primary/20 transition-colors min-h-[44px] active:scale-[0.98]"
+                      disabled={isMutating}
+                      className="px-4 py-2.5 bg-primary/10 text-primary rounded-xl text-sm font-semibold hover:bg-primary/20 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
                     >
                       {listing.status === 'Draft' ? 'Publish' : 'Resume'}
-                    </button>
-                  )}
-                  {listing.status !== 'Archived' && listing.status !== 'SoldOut' && (
-                    <button
-                      onClick={() => handleArchive(listing)}
-                      className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors min-h-[44px] active:scale-[0.98]"
-                    >
-                      Archive
                     </button>
                   )}
                   {listing.status === 'Archived' && (
                     <button
                       onClick={() => handlePauseResume(listing)}
-                      className="px-4 py-2.5 bg-primary/10 text-primary rounded-xl text-sm font-semibold hover:bg-primary/20 transition-colors min-h-[44px] active:scale-[0.98]"
+                      disabled={isMutating}
+                      className="px-4 py-2.5 bg-primary/10 text-primary rounded-xl text-sm font-semibold hover:bg-primary/20 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
                     >
                       Restore
                     </button>
                   )}
+                  {listing.status !== 'Archived' && listing.status !== 'SoldOut' && (
+                    <button
+                      onClick={() => handleArchive(listing)}
+                      disabled={isMutating}
+                      className="px-4 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted/80 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
+                    >
+                      Archive
+                    </button>
+                  )}
                   <button
                     onClick={() => setDeleteConfirm(listing)}
-                    className="px-4 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-semibold hover:bg-destructive/20 transition-colors min-h-[44px] active:scale-[0.98]"
+                    disabled={isMutating}
+                    className="px-4 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-semibold hover:bg-destructive/20 transition-colors min-h-[44px] active:scale-[0.98] disabled:opacity-50"
                   >
                     Delete
                   </button>
@@ -243,7 +357,6 @@ const FarmerListings = () => {
           </div>
         )}
 
-        {/* Edit Modal */}
         <Modal isOpen={!!editingListing} onClose={() => setEditingListing(null)} title="Edit Listing">
           <div className="space-y-4">
             <div>
@@ -251,7 +364,7 @@ const FarmerListings = () => {
               <input
                 type="number"
                 value={editPrice}
-                onChange={(e) => setEditPrice(e.target.value)}
+                onChange={(event) => setEditPrice(event.target.value)}
                 className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary text-base"
               />
             </div>
@@ -260,22 +373,22 @@ const FarmerListings = () => {
               <input
                 type="number"
                 value={editQuantity}
-                onChange={(e) => setEditQuantity(e.target.value)}
+                onChange={(event) => setEditQuantity(event.target.value)}
                 className="w-full px-4 py-4 bg-muted border border-border rounded-xl text-foreground min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary text-base"
               />
             </div>
             <div className="pt-2">
               <button
                 onClick={handleSaveEdit}
-                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98]"
+                disabled={isMutating}
+                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98] disabled:opacity-50"
               >
-                Save Changes
+                {isMutating ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
         </Modal>
 
-        {/* Delete Confirmation Modal */}
         <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete Listing?">
           <div className="space-y-4">
             <p className="text-muted-foreground">
@@ -296,9 +409,10 @@ const FarmerListings = () => {
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 py-4 bg-destructive text-destructive-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98]"
+                disabled={isMutating}
+                className="flex-1 py-4 bg-destructive text-destructive-foreground rounded-xl font-semibold min-h-[52px] active:scale-[0.98] disabled:opacity-50"
               >
-                Delete
+                {isMutating ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

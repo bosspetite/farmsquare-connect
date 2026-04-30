@@ -1,68 +1,97 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, CreditCard, TrendingUp, ArrowDownCircle, Plus, History, Lock } from 'lucide-react';
+import { AlertCircle, ArrowDownCircle, CreditCard, History, Lock, Plus, TrendingUp, Wallet } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
-import { useAuth } from '@/contexts/AuthContext';
-import { getWalletByUserId, getTransactionsByUserId, formatNaira, formatDate, getAppState, fundBuyerWallet } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
+import { formatDate, formatNaira } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 import { Modal } from '@/components/ui/Modal';
 import { usePaystack } from '@/hooks/usePaystack';
+import { Transaction, Wallet as WalletType } from '@/types';
+import { fundWallet, getWalletByUserId, getWalletTransactions } from '@/services/walletService';
+
+const creditTransactionTypes = new Set(['Credit', 'fund', 'release', 'refund']);
 
 const BuyerWallet = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { initializePayment, isLoaded, isProcessing, isConfigured } = usePaystack();
-  const state = getAppState();
-  const buyerWallet = user ? getWalletByUserId(user.id) : null;
-  const transactions = user ? getTransactionsByUserId(user.id) : [];
-  
+  const [wallet, setWallet] = useState<WalletType | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showFundModal, setShowFundModal] = useState(false);
   const [fundAmount, setFundAmount] = useState('');
   const [activeTab, setActiveTab] = useState<'transactions' | 'history'>('transactions');
   const [email, setEmail] = useState(user?.email || '');
 
+  const loadWallet = async () => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const [walletRow, transactionRows] = await Promise.all([
+        getWalletByUserId(user.id),
+        getWalletTransactions(user.id),
+      ]);
+      setWallet(walletRow);
+      setTransactions(transactionRows);
+    } catch (error: any) {
+      setLoadError(error?.message || 'Unable to load your wallet right now.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWallet();
+  }, [user?.id]);
+
   const handleFundWallet = () => {
     if (!fundAmount || parseFloat(fundAmount) <= 0) {
-      toast({ 
-        title: 'Invalid amount', 
+      toast({
+        title: 'Invalid amount',
         description: 'Please enter a valid amount',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
 
     if (!user) {
-      toast({ 
-        title: 'Authentication required', 
+      toast({
+        title: 'Authentication required',
         description: 'Please log in to fund your wallet',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
 
     if (!isConfigured) {
-      toast({ 
-        title: 'Payment Configuration Error', 
+      toast({
+        title: 'Payment Configuration Error',
         description: 'Paystack is not configured. Please contact support.',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
 
     if (!isLoaded) {
-      toast({ 
-        title: 'Payment system loading', 
+      toast({
+        title: 'Payment system loading',
         description: 'Please wait a moment and try again',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
 
     if (!email || !email.includes('@')) {
-      toast({ 
-        title: 'Invalid email', 
+      toast({
+        title: 'Invalid email',
         description: 'Please enter a valid email address',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
@@ -70,8 +99,8 @@ const BuyerWallet = () => {
     const amount = parseFloat(fundAmount);
 
     initializePayment({
-      email: email,
-      amount: amount,
+      email,
+      amount,
       metadata: {
         custom_fields: [
           {
@@ -81,40 +110,60 @@ const BuyerWallet = () => {
           },
         ],
       },
-      onClose: () => {
-        // User closed payment window
-      },
-      onSuccess: (reference) => {
-        // Fund wallet using the store helper
-        fundBuyerWallet(user.id, amount, reference);
-        
-        toast({ 
-          title: 'Wallet funded successfully!', 
-          description: `${formatNaira(amount)} has been added to your wallet` 
-        });
-        setShowFundModal(false);
-        setFundAmount('');
-        // Reload to show updated balance
-        setTimeout(() => window.location.reload(), 1000);
-      },
-      onError: (message) => {
-        // Error toast is already shown by the hook
+      onSuccess: async (reference) => {
+        try {
+          await fundWallet(user.id, amount, reference);
+          toast({
+            title: 'Wallet funded successfully!',
+            description: `${formatNaira(amount)} has been added to your wallet`,
+          });
+          setShowFundModal(false);
+          setFundAmount('');
+          await loadWallet();
+        } catch (error: any) {
+          toast({
+            title: 'Unable to update wallet',
+            description: error?.message || 'Your payment succeeded, but the wallet update failed.',
+            variant: 'destructive',
+          });
+        }
       },
     });
   };
 
-  if (!buyerWallet) {
+  if (isLoading) {
     return (
       <BuyerLayout>
-        <div className="text-center py-12">
-          <Wallet className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Wallet not found</p>
+        <div className="space-y-6 animate-fade-up max-w-4xl mx-auto">
+          <div className="farm-card">
+            <div className="h-40 bg-muted rounded-xl animate-pulse" />
+          </div>
         </div>
       </BuyerLayout>
     );
   }
 
-  const totalBalance = buyerWallet.available + buyerWallet.pending;
+  if (!wallet || loadError) {
+    return (
+      <BuyerLayout>
+        <div className="space-y-6 animate-fade-up max-w-4xl mx-auto">
+          <div className="farm-card bg-destructive/5 border-destructive/20 text-center py-12">
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <p className="text-foreground font-semibold mb-2">Wallet unavailable</p>
+            <p className="text-muted-foreground mb-4">{loadError || 'Wallet not found'}</p>
+            <button
+              onClick={loadWallet}
+              className="px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </BuyerLayout>
+    );
+  }
+
+  const totalBalance = wallet.available + wallet.pending;
   const recentTransactions = transactions.slice(0, 10);
 
   return (
@@ -125,14 +174,13 @@ const BuyerWallet = () => {
           <p className="text-muted-foreground">Manage your payments and escrow funds</p>
         </div>
 
-        {/* Wallet Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="farm-card bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-muted-foreground">Available Balance</p>
               <Wallet className="w-5 h-5 text-primary" />
             </div>
-            <p className="text-3xl font-bold text-foreground">{formatNaira(buyerWallet.available)}</p>
+            <p className="text-3xl font-bold text-foreground">{formatNaira(wallet.available)}</p>
             <p className="text-xs text-muted-foreground mt-2">Ready to use</p>
           </div>
 
@@ -141,7 +189,7 @@ const BuyerWallet = () => {
               <p className="text-sm text-muted-foreground">In Escrow</p>
               <Lock className="w-5 h-5 text-farm-warning" />
             </div>
-            <p className="text-3xl font-bold text-foreground">{formatNaira(buyerWallet.pending)}</p>
+            <p className="text-3xl font-bold text-foreground">{formatNaira(wallet.pending)}</p>
             <p className="text-xs text-muted-foreground mt-2">Locked in orders</p>
           </div>
 
@@ -155,7 +203,6 @@ const BuyerWallet = () => {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-3">
           <button
             onClick={() => setShowFundModal(true)}
@@ -166,16 +213,14 @@ const BuyerWallet = () => {
           </button>
         </div>
 
-        {/* Escrow Info */}
-        {buyerWallet.pending > 0 && (
+        {wallet.pending > 0 && (
           <div className="farm-card bg-farm-warning/10 border-farm-warning/20">
             <div className="flex items-start gap-3">
               <Lock className="w-6 h-6 text-farm-warning flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-foreground mb-1">Escrow Funds</p>
                 <p className="text-sm text-muted-foreground mb-2">
-                  {formatNaira(buyerWallet.pending)} is currently held in escrow for pending orders. 
-                  Funds will be released to farmers once you confirm delivery.
+                  {formatNaira(wallet.pending)} is currently held in escrow for pending orders.
                 </p>
                 <button
                   onClick={() => navigate('/buyer/orders')}
@@ -188,7 +233,6 @@ const BuyerWallet = () => {
           </div>
         )}
 
-        {/* Tabs */}
         <div className="flex gap-2 border-b border-border">
           <button
             onClick={() => setActiveTab('transactions')}
@@ -212,7 +256,6 @@ const BuyerWallet = () => {
           </button>
         </div>
 
-        {/* Transactions */}
         <div className="farm-card">
           {activeTab === 'transactions' ? (
             <>
@@ -224,35 +267,34 @@ const BuyerWallet = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {recentTransactions.map((txn) => (
-                    <div
-                      key={txn.id}
-                      className="flex items-center justify-between p-4 bg-muted/50 rounded-xl"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          txn.type === 'Credit' 
-                            ? 'bg-farm-success/10' 
-                            : 'bg-destructive/10'
-                        }`}>
-                          {txn.type === 'Credit' ? (
-                            <ArrowDownCircle className="w-5 h-5 text-farm-success" />
-                          ) : (
-                            <CreditCard className="w-5 h-5 text-destructive" />
-                          )}
+                  {recentTransactions.map((transaction) => {
+                    const isCredit = creditTransactionTypes.has(transaction.type);
+                    return (
+                      <div
+                        key={transaction.id}
+                        className="flex items-center justify-between p-4 bg-muted/50 rounded-xl"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            isCredit ? 'bg-farm-success/10' : 'bg-destructive/10'
+                          }`}>
+                            {isCredit ? (
+                              <ArrowDownCircle className="w-5 h-5 text-farm-success" />
+                            ) : (
+                              <CreditCard className="w-5 h-5 text-destructive" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground">{transaction.title}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(transaction.createdAt)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-foreground">{txn.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(txn.timestamp)}</p>
-                        </div>
+                        <p className={`font-semibold ${isCredit ? 'text-farm-success' : 'text-destructive'}`}>
+                          {isCredit ? '+' : '-'}{formatNaira(transaction.amount)}
+                        </p>
                       </div>
-                      <p className={`font-semibold ${
-                        txn.type === 'Credit' ? 'text-farm-success' : 'text-destructive'
-                      }`}>
-                        {txn.type === 'Credit' ? '+' : '-'}{formatNaira(txn.amount)}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -266,42 +308,40 @@ const BuyerWallet = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {transactions.map((txn) => (
-                    <div
-                      key={txn.id}
-                      className="flex items-center justify-between p-4 bg-muted/50 rounded-xl"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          txn.type === 'Credit' 
-                            ? 'bg-farm-success/10' 
-                            : 'bg-destructive/10'
-                        }`}>
-                          {txn.type === 'Credit' ? (
-                            <ArrowDownCircle className="w-5 h-5 text-farm-success" />
-                          ) : (
-                            <CreditCard className="w-5 h-5 text-destructive" />
-                          )}
+                  {transactions.map((transaction) => {
+                    const isCredit = creditTransactionTypes.has(transaction.type);
+                    return (
+                      <div
+                        key={transaction.id}
+                        className="flex items-center justify-between p-4 bg-muted/50 rounded-xl"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            isCredit ? 'bg-farm-success/10' : 'bg-destructive/10'
+                          }`}>
+                            {isCredit ? (
+                              <ArrowDownCircle className="w-5 h-5 text-farm-success" />
+                            ) : (
+                              <CreditCard className="w-5 h-5 text-destructive" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground">{transaction.title}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(transaction.createdAt)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-foreground">{txn.description}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(txn.timestamp)}</p>
-                        </div>
+                        <p className={`font-semibold ${isCredit ? 'text-farm-success' : 'text-destructive'}`}>
+                          {isCredit ? '+' : '-'}{formatNaira(transaction.amount)}
+                        </p>
                       </div>
-                      <p className={`font-semibold ${
-                        txn.type === 'Credit' ? 'text-farm-success' : 'text-destructive'
-                      }`}>
-                        {txn.type === 'Credit' ? '+' : '-'}{formatNaira(txn.amount)}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* Fund Wallet Modal */}
         <Modal isOpen={showFundModal} onClose={() => setShowFundModal(false)} title="Fund Wallet">
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -310,7 +350,7 @@ const BuyerWallet = () => {
             {!isConfigured && (
               <div className="p-3 bg-farm-warning/10 border border-farm-warning/20 rounded-lg">
                 <p className="text-sm text-farm-warning">
-                  ⚠️ Paystack API key not configured. Wallet funding will not work.
+                  Paystack API key not configured. Wallet funding will not work.
                 </p>
               </div>
             )}
@@ -319,30 +359,25 @@ const BuyerWallet = () => {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value.toLowerCase().trim())}
+                onChange={(event) => setEmail(event.target.value.toLowerCase().trim())}
                 placeholder="your.email@example.com"
                 className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                A payment receipt will be sent to this email
-              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">Amount (₦)</label>
               <input
                 type="number"
                 value={fundAmount}
-                onChange={(e) => setFundAmount(e.target.value)}
+                onChange={(event) => setFundAmount(event.target.value)}
                 placeholder="Enter amount"
                 min="1"
                 className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              {buyerWallet && (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Current balance: {formatNaira(buyerWallet.available)}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Current balance: {formatNaira(wallet.available)}
+              </p>
             </div>
             <div className="flex gap-3">
               <button
@@ -359,17 +394,7 @@ const BuyerWallet = () => {
                 disabled={!fundAmount || parseFloat(fundAmount) <= 0 || !email || !email.includes('@') || !isLoaded || !isConfigured || isProcessing}
                 className="flex-1 py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
-                {isProcessing ? (
-                  <>
-                    <span className="animate-spin">⏳</span>
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-4 h-4" />
-                    Fund Wallet
-                  </>
-                )}
+                {isProcessing ? 'Processing...' : 'Fund Wallet'}
               </button>
             </div>
           </div>
@@ -380,11 +405,3 @@ const BuyerWallet = () => {
 };
 
 export default BuyerWallet;
-
-
-
-
-
-
-
-

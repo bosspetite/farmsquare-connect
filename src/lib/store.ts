@@ -85,8 +85,6 @@ const createSeedData = (): AppState => {
         createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ],
-    escrows: [],
-    platformCommission: 0,
     wallets: [
       {
         userId: farmerId,
@@ -1458,4 +1456,3 @@ export const fundBuyerWallet = (userId: string, amount: number, reference: strin
   
   setAppState(state);
 };
-

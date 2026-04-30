@@ -1,16 +1,35 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, Package, CheckCircle, Clock, AlertCircle, Eye, MapPin } from 'lucide-react';
 import { AgentLayout } from '@/components/layouts/AgentLayout';
-import { getAppState, formatNaira, formatDate, formatTimeAgo } from '@/lib/store';
+import { formatNaira, formatDate, formatTimeAgo } from '@/lib/store';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { getProduceImage } from '@/utils/produceImages';
+import { getPendingInspections } from '@/services/agentService';
+import { Order } from '@/types';
 
 const AgentInspections = () => {
   const navigate = useNavigate();
-  const state = getAppState();
-  const orders = state.orders;
-  
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setLoading(true);
+        setErrorMessage(null);
+        const nextOrders = await getPendingInspections();
+        setOrders(nextOrders);
+      } catch (error) {
+        console.error('[AgentInspections] Failed to load inspections', error);
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to load inspections.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const pendingOrders = orders.filter(o => o.status === 'Pending' || o.status === 'Accepted');
   const inProgressOrders = orders.filter(o => ['PickupScheduled', 'InTransit', 'Processing'].includes(o.status));
   const completedOrders = orders.filter(o => o.status === 'Delivered');
@@ -52,7 +71,6 @@ const AgentInspections = () => {
             </div>
             <div className="space-y-3">
               {pendingOrders.map((order) => {
-                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -61,7 +79,7 @@ const AgentInspections = () => {
                   >
                     <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       <img 
-                        src={listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(order.commodity)} 
+                        src={order.listingPhotos?.[0] || getProduceImage(order.commodity)} 
                         alt={order.commodity} 
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -118,7 +136,6 @@ const AgentInspections = () => {
             </div>
             <div className="space-y-3">
               {inProgressOrders.map((order) => {
-                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -127,7 +144,7 @@ const AgentInspections = () => {
                   >
                     <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       <img 
-                        src={listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(order.commodity)} 
+                        src={order.listingPhotos?.[0] || getProduceImage(order.commodity)} 
                         alt={order.commodity} 
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -188,7 +205,6 @@ const AgentInspections = () => {
             </div>
             <div className="space-y-3">
               {completedOrders.slice(0, 10).map((order) => {
-                const listing = (state.listings || []).find(l => l.id === order.listingId);
                 return (
                   <div
                     key={order.id}
@@ -197,7 +213,7 @@ const AgentInspections = () => {
                   >
                     <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       <img 
-                        src={listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(order.commodity)} 
+                        src={order.listingPhotos?.[0] || getProduceImage(order.commodity)} 
                         alt={order.commodity} 
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -232,7 +248,18 @@ const AgentInspections = () => {
           </div>
         )}
 
-        {orders.length === 0 && (
+        {loading ? (
+          <div className="farm-card text-center py-12">
+            <ClipboardCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+            <p className="text-muted-foreground">Loading inspections from Supabase...</p>
+          </div>
+        ) : errorMessage ? (
+          <div className="farm-card text-center py-12">
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <p className="text-foreground font-medium mb-2">Could not load inspections</p>
+            <p className="text-sm text-muted-foreground">{errorMessage}</p>
+          </div>
+        ) : orders.length === 0 && (
           <div className="farm-card text-center py-12">
             <ClipboardCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">No inspections found</p>
@@ -244,4 +271,3 @@ const AgentInspections = () => {
 };
 
 export default AgentInspections;
-

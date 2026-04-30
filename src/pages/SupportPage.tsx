@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, MessageCircle, HelpCircle, Clock, Phone } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
 
 const SupportPage = () => {
   const supportOptions = [
@@ -221,4 +221,3 @@ const SupportPage = () => {
 };
 
 export default SupportPage;
-

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { CreditCard, Lock, CheckCircle, X, Loader2, Shield, Smartphone, Monitor, AlertCircle } from 'lucide-react';
-import { formatNaira, getAppState, setAppState, addTransaction, fundBuyerWallet } from '@/lib/store';
+import { formatNaira } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { usePaystack } from '@/hooks/usePaystack';
 
 interface PaymentGatewayProps {
@@ -12,103 +12,210 @@ interface PaymentGatewayProps {
     quantity: number;
     farmerName: string;
   };
-  onSuccess: () => void;
+  onPrepareOrder: (reference: string) => Promise<string>;
+  onSuccess: (orderId: string, reference: string) => Promise<void>;
+  onDiscardPendingOrder: (orderId: string) => Promise<void>;
   onCancel: () => void;
 }
 
-const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGatewayProps) => {
+const PaymentGateway = ({ amount, orderDetails, onPrepareOrder, onSuccess, onDiscardPendingOrder, onCancel }: PaymentGatewayProps) => {
   const { user } = useAuth();
-  const { initializePayment, isLoaded, isProcessing, isConfigured } = usePaystack();
-  const [step, setStep] = useState<'card' | 'processing' | 'success' | 'failed'>('card');
+  const { initializePayment, isLoaded, isProcessing, isConfigured, loadError } = usePaystack();
+  const [step, setStep] = useState<'card' | 'success' | 'failed'>('card');
   const [email, setEmail] = useState(user?.email || '');
+  const [failureReason, setFailureReason] = useState('Payment could not be started. Please try again.');
+  const [isPreparingOrder, setIsPreparingOrder] = useState(false);
+  const [isFinalizingOrder, setIsFinalizingOrder] = useState(false);
+  const isBusy = isPreparingOrder || isFinalizingOrder || isProcessing;
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (!email || !email.includes('@')) {
-      toast({ 
-        title: 'Invalid email', 
+      toast({
+        title: 'Invalid email',
         description: 'Please enter a valid email address',
-        variant: 'destructive'
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({
+        title: 'Invalid payment amount',
+        description: 'Payment could not be started. Please try again.',
+        variant: 'destructive',
       });
       return;
     }
 
     if (!isConfigured) {
-      toast({ 
-        title: 'Payment Configuration Error', 
-        description: 'Paystack is not configured. Please contact support.',
-        variant: 'destructive'
+      toast({
+        title: 'Payment configuration error',
+        description: 'Payment could not be started. Please try again.',
+        variant: 'destructive',
       });
       return;
     }
 
     if (!isLoaded) {
-      toast({ 
-        title: 'Payment system loading', 
-        description: 'Please wait a moment and try again',
-        variant: 'destructive'
+      toast({
+        title: 'Payment system loading',
+        description: loadError || 'Please wait a moment and try again',
+        variant: 'destructive',
       });
       return;
     }
 
-    setStep('processing');
+    if (isPreparingOrder || isFinalizingOrder || isProcessing) {
+      return;
+    }
+
+    setFailureReason('Payment could not be started. Please try again.');
+    console.log('[PaymentGateway] Starting payment attempt', {
+      commodity: orderDetails.commodity,
+      requestedQuantity: orderDetails.quantity,
+      totalAmount: amount,
+      amountInKobo: Math.round(amount * 100),
+      buyerEmail: email,
+      buyerId: user?.id,
+    });
+
+    const paymentReference = `FSQ_${Date.now()}_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
+    console.log('[PaymentGateway] Creating pending order before opening Paystack', {
+      paymentReference,
+      commodity: orderDetails.commodity,
+      requestedQuantity: orderDetails.quantity,
+      totalAmount: amount,
+    });
+
+    let pendingOrderId = '';
+
+    try {
+      setIsPreparingOrder(true);
+      pendingOrderId = await onPrepareOrder(paymentReference);
+      console.log('[PaymentGateway] Pending order created', {
+        orderId: pendingOrderId,
+        paymentReference,
+      });
+    } catch (error: any) {
+      console.error('[PaymentGateway] Failed to create pending order', {
+        paymentReference,
+        error,
+      });
+      setFailureReason('Order could not be created. Please try again.');
+      setStep('failed');
+      toast({
+        title: 'Order could not be created.',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
+      setIsPreparingOrder(false);
+      return;
+    } finally {
+      setIsPreparingOrder(false);
+    }
 
     initializePayment({
-        email: email,
-      amount: amount,
-        metadata: {
-          custom_fields: [
-            {
-              display_name: 'Commodity',
-              variable_name: 'commodity',
-              value: orderDetails.commodity,
-            },
-            {
-              display_name: 'Quantity',
-              variable_name: 'quantity',
-              value: `${orderDetails.quantity}kg`,
-            },
-            {
-              display_name: 'Farmer',
-              variable_name: 'farmer_name',
-              value: orderDetails.farmerName,
-            },
-          ],
-        },
-        onClose: () => {
-          setStep('card');
-          toast({ 
-            title: 'Payment cancelled', 
-            description: 'You closed the payment window',
-            variant: 'default'
-          });
-        },
-      onSuccess: (reference) => {
-            // Payment successful - fund wallet
-            if (user) {
-          fundBuyerWallet(user.id, amount, reference);
-            }
-            
-            setStep('success');
-            toast({ 
-              title: 'Payment successful!', 
-              description: `Payment of ${formatNaira(amount)} processed successfully`,
-            });
-            
-            setTimeout(() => {
-              onSuccess();
-            }, 2000);
+      email,
+      amount,
+      reference: paymentReference,
+      metadata: {
+        custom_fields: [
+          {
+            display_name: 'Commodity',
+            variable_name: 'commodity',
+            value: orderDetails.commodity,
+          },
+          {
+            display_name: 'Quantity',
+            variable_name: 'quantity',
+            value: `${orderDetails.quantity}kg`,
+          },
+          {
+            display_name: 'Farmer',
+            variable_name: 'farmer_name',
+            value: orderDetails.farmerName,
+          },
+        ],
       },
-      onError: (message) => {
-            setStep('failed');
-        // Error toast is already shown by the hook
-        },
-      });
+      onClose: async () => {
+        console.log('[PaymentGateway] Payment window closed', {
+          orderId: pendingOrderId,
+          paymentReference,
+          commodity: orderDetails.commodity,
+          requestedQuantity: orderDetails.quantity,
+        });
+        try {
+          await onDiscardPendingOrder(pendingOrderId);
+        } catch (error) {
+          console.error('[PaymentGateway] Failed to discard pending order after close', {
+            orderId: pendingOrderId,
+            paymentReference,
+            error,
+          });
+        }
+        setStep('card');
+        toast({
+          title: 'Payment cancelled',
+          description: 'Payment was cancelled.',
+        });
+      },
+      onSuccess: async (reference) => {
+        console.log('[PaymentGateway] Payment succeeded', {
+          orderId: pendingOrderId,
+          reference,
+          commodity: orderDetails.commodity,
+          requestedQuantity: orderDetails.quantity,
+          totalAmount: amount,
+        });
+        setStep('success');
+        setIsFinalizingOrder(true);
+        toast({
+          title: 'Payment successful.',
+          description: `Payment of ${formatNaira(amount)} processed successfully.`,
+        });
+        try {
+          await onSuccess(pendingOrderId, reference);
+        } catch (error: any) {
+          console.error('[PaymentGateway] Order update after payment failed', {
+            orderId: pendingOrderId,
+            reference,
+            error,
+          });
+          setFailureReason('Payment completed, but order update failed. Please contact support with your reference.');
+          setStep('failed');
+        } finally {
+          setIsFinalizingOrder(false);
+        }
+      },
+      onError: async (message) => {
+        console.error('[PaymentGateway] Payment initialization failed', {
+          orderId: pendingOrderId,
+          paymentReference,
+          commodity: orderDetails.commodity,
+          requestedQuantity: orderDetails.quantity,
+          totalAmount: amount,
+          buyerEmail: email,
+          message,
+        });
+        try {
+          await onDiscardPendingOrder(pendingOrderId);
+        } catch (error) {
+          console.error('[PaymentGateway] Failed to discard pending order after payment error', {
+            orderId: pendingOrderId,
+            paymentReference,
+            error,
+          });
+        }
+        setFailureReason(message || 'Payment could not be started. Please try again.');
+        setStep('failed');
+      },
+    });
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-card rounded-xl sm:rounded-2xl shadow-2xl max-w-md w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="sticky top-0 bg-card border-b border-border p-4 sm:p-6 flex items-center justify-between z-10">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -121,6 +228,7 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
           </div>
           <button
             onClick={onCancel}
+            disabled={isBusy}
             className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors flex-shrink-0"
             aria-label="Close"
           >
@@ -128,10 +236,8 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
           </button>
         </div>
 
-        {/* Payment Steps */}
         {step === 'card' && (
           <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-            {/* Order Summary */}
             <div className="p-3 sm:p-4 bg-muted/50 rounded-lg sm:rounded-xl">
               <h3 className="font-semibold text-foreground mb-2 sm:mb-3 text-sm sm:text-base">Order Summary</h3>
               <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
@@ -154,7 +260,6 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
               </div>
             </div>
 
-            {/* Payment Form */}
             <div className="space-y-3 sm:space-y-4">
               {!isConfigured && (
                 <div className="p-3 bg-farm-warning/10 border border-farm-warning/20 rounded-lg">
@@ -164,12 +269,21 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
                   </div>
                 </div>
               )}
+              {isConfigured && loadError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <div className="flex items-center gap-2 text-destructive text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{loadError} Refresh the page and try again.</span>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value.toLowerCase().trim())}
+                  onChange={(event) => setEmail(event.target.value.toLowerCase().trim())}
                   placeholder="your.email@example.com"
                   className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-muted border border-border rounded-lg sm:rounded-xl text-foreground text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-primary"
                   required
@@ -179,7 +293,6 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
                 </p>
               </div>
 
-              {/* Paystack Branding */}
               <div className="flex items-center gap-2 p-3 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg sm:rounded-xl border border-primary/20">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
@@ -190,7 +303,6 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
                 </div>
               </div>
 
-              {/* Security Badge */}
               <div className="flex items-start gap-2 p-3 bg-farm-success/10 rounded-lg sm:rounded-xl">
                 <Shield className="w-4 h-4 text-farm-success mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -201,34 +313,43 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2 sm:pt-4">
               <button
                 onClick={onCancel}
-                className="flex-1 py-2.5 sm:py-3 bg-muted text-foreground rounded-lg sm:rounded-xl font-medium hover:bg-muted/80 transition-colors text-sm sm:text-base"
+                disabled={isBusy}
+                className="flex-1 py-2.5 sm:py-3 bg-muted text-foreground rounded-lg sm:rounded-xl font-medium hover:bg-muted/80 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handlePayment}
-                disabled={!email || !email.includes('@') || !isLoaded || !isConfigured || isProcessing}
+                disabled={!email || !email.includes('@') || !isLoaded || !isConfigured || isBusy}
                 className="flex-1 py-2.5 sm:py-3 bg-primary text-primary-foreground rounded-lg sm:rounded-xl font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
               >
-                {isProcessing ? (
+                {isPreparingOrder ? (
                   <>
                     <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                    Processing...
+                    Creating order...
+                  </>
+                ) : isFinalizingOrder ? (
+                  <>
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                    Finalizing order...
+                  </>
+                ) : isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                    Starting payment...
                   </>
                 ) : (
                   <>
                     <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Pay {formatNaira(amount)}
+                    Make Payment
                   </>
                 )}
               </button>
             </div>
 
-            {/* Payment Methods Info */}
             <div className="pt-2 border-t border-border">
               <p className="text-xs text-muted-foreground text-center mb-2">Accepted Payment Methods</p>
               <div className="flex items-center justify-center gap-4 flex-wrap">
@@ -247,31 +368,13 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
           </div>
         )}
 
-        {step === 'processing' && (
-          <div className="p-8 sm:p-12 text-center">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Loader2 className="w-7 h-7 sm:w-8 sm:h-8 text-primary animate-spin" />
-            </div>
-            <h3 className="font-semibold text-foreground mb-2 text-base sm:text-lg">Processing Payment</h3>
-            <p className="text-sm text-muted-foreground">Please complete the payment in the popup window...</p>
-            {!isConfigured && (
-              <div className="mt-4 p-3 bg-farm-warning/10 border border-farm-warning/20 rounded-lg">
-                <div className="flex items-center gap-2 text-farm-warning text-sm">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Paystack API key not configured</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {step === 'success' && (
           <div className="p-8 sm:p-12 text-center">
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-farm-success/10 flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 text-farm-success" />
             </div>
             <h3 className="font-semibold text-foreground mb-2 text-base sm:text-lg">Payment Successful!</h3>
-            <p className="text-sm text-muted-foreground">Your payment has been processed successfully</p>
+            <p className="text-sm text-muted-foreground">Your payment has been processed successfully.</p>
           </div>
         )}
 
@@ -281,7 +384,7 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
               <X className="w-7 h-7 sm:w-8 sm:h-8 text-destructive" />
             </div>
             <h3 className="font-semibold text-foreground mb-2 text-base sm:text-lg">Payment Failed</h3>
-            <p className="text-sm text-muted-foreground mb-4 sm:mb-6">Your payment could not be processed</p>
+            <p className="text-sm text-muted-foreground mb-4 sm:mb-6">{failureReason}</p>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 onClick={onCancel}
@@ -291,8 +394,8 @@ const PaymentGateway = ({ amount, orderDetails, onSuccess, onCancel }: PaymentGa
               </button>
               <button
                 onClick={() => {
+                  setFailureReason('Payment could not be started. Please try again.');
                   setStep('card');
-                  setProcessing(false);
                 }}
                 className="flex-1 py-2.5 sm:py-3 bg-primary text-primary-foreground rounded-lg sm:rounded-xl font-medium text-sm sm:text-base"
               >
