@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Lock, Eye, FileText } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
 
 const PrivacyPage = () => {
   const sections = [
@@ -200,4 +200,3 @@ const PrivacyPage = () => {
 };
 
 export default PrivacyPage;
-

@@ -48,11 +48,9 @@ export const LandingPageWithIntro = () => {
     return null;
   }
 
-  return (
-    <>
-      {showIntro && <IntroScreen onComplete={handleIntroComplete} />}
-      <LandingPage />
-    </>
-  );
-};
+  if (showIntro) {
+    return <IntroScreen onComplete={handleIntroComplete} />;
+  }
 
+  return <LandingPage />;
+};

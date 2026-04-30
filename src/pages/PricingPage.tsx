@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Check, TrendingUp, Users, Shield } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
 
 const PricingPage = () => {
   const plans = [
@@ -261,4 +261,3 @@ const PricingPage = () => {
 };
 
 export default PricingPage;
-

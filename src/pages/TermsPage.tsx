@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Scale, AlertCircle, CheckCircle } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
 
 const TermsPage = () => {
   const sections = [
@@ -200,4 +200,3 @@ const TermsPage = () => {
 };
 
 export default TermsPage;
-

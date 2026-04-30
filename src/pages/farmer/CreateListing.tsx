@@ -1,14 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Save, AlertCircle, Shield } from 'lucide-react';
+import { ArrowLeft, Check, Save, Shield } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
+import { AdminLayout } from '@/components/layouts/AdminLayout';
 import { Stepper } from '@/components/ui/Stepper';
 import { FileUploader } from '@/components/ui/FileUploader';
-import { useAuth } from '@/contexts/AuthContext';
-import { addListing, formatNaira, getKYCByUserId } from '@/lib/store';
-import { GradeType } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { formatNaira } from '@/lib/store';
+import { GradeType, ProductImageLibraryItem, ProductImageSource } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { Package } from 'lucide-react';
+import { createListing } from '@/services/listingService';
+import { ProductImageLibraryPicker } from '@/components/listings/ProductImageLibraryPicker';
+import { getActiveProductLibraryImages, uploadFarmerProductImage } from '@/services/productImageLibraryService';
 
 const steps = [
   { label: 'Crop' },
@@ -24,22 +28,60 @@ const grades: GradeType[] = ['A', 'B', 'C'];
 const CreateListing = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdminSeller = user?.role === 'admin';
+  const backToDashboardPath = isAdminSeller ? '/admin/dashboard' : '/farmer/dashboard';
+  const listingsPath = isAdminSeller ? '/admin/listings' : '/farmer/listings';
+  const LayoutComponent = isAdminSeller ? AdminLayout : FarmerLayout;
   const [step, setStep] = useState(0);
   const [commodity, setCommodity] = useState<typeof commodities[number]>('Maize');
   const [quantity, setQuantity] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [imageSource, setImageSource] = useState<ProductImageSource>('upload');
+  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
+  const [uploadedPhotoObjects, setUploadedPhotoObjects] = useState<File[]>([]);
+  const [libraryImages, setLibraryImages] = useState<ProductImageLibraryItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [selectedLibraryImage, setSelectedLibraryImage] = useState<ProductImageLibraryItem | null>(null);
   const [price, setPrice] = useState('');
   const [grade, setGrade] = useState<GradeType>('A');
-  const [kycData, setKycData] = useState(user ? getKYCByUserId(user.id) : null);
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isKYCApproved = isAdminSeller || user?.kycStatus === 'APPROVED';
+  const previewPhotos = useMemo(
+    () => (imageSource === 'library' ? (selectedLibraryImage ? [selectedLibraryImage.imageUrl] : []) : uploadedPhotos),
+    [imageSource, selectedLibraryImage, uploadedPhotos]
+  );
+
   useEffect(() => {
-    if (user) {
-      const data = getKYCByUserId(user.id);
-      setKycData(data);
-    }
-  }, [user]);
-  
-  const isKYCApproved = kycData?.status === 'APPROVED';
+    let active = true;
+
+    const loadLibraryImages = async () => {
+      try {
+        setLibraryLoading(true);
+        const images = await getActiveProductLibraryImages();
+        if (active) {
+          setLibraryImages(images);
+        }
+      } catch (error) {
+        console.error('[CreateListing] Failed to load product image library', error);
+        if (active) {
+          toast({
+            title: 'Image library unavailable',
+            description: 'You can still upload your own product image and continue.',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (active) {
+          setLibraryLoading(false);
+        }
+      }
+    };
+
+    void loadLibraryImages();
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   const handleNext = () => {
     if (step < 4) setStep(step + 1);
@@ -49,11 +91,11 @@ const CreateListing = () => {
     if (step > 0) {
       setStep(step - 1);
     } else {
-      navigate('/farmer/dashboard');
+      navigate(backToDashboardPath);
     }
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!user) return;
     
     // Check KYC approval
@@ -68,7 +110,7 @@ const CreateListing = () => {
     }
     
     // Validate required fields
-    if (!quantity || parseInt(quantity) <= 0) {
+    if (!quantity || !Number.isFinite(parseFloat(quantity)) || parseFloat(quantity) <= 0) {
       toast({ 
         title: 'Invalid quantity', 
         description: 'Please enter a valid quantity',
@@ -77,7 +119,7 @@ const CreateListing = () => {
       return;
     }
     
-    if (!price || parseInt(price) <= 0) {
+    if (!price || !Number.isFinite(parseFloat(price)) || parseFloat(price) <= 0) {
       toast({ 
         title: 'Invalid price', 
         description: 'Please enter a valid price',
@@ -86,57 +128,139 @@ const CreateListing = () => {
       return;
     }
     
-    // Ensure photos array is properly formatted
-    const validPhotos = photos.filter(photo => photo && photo.length > 0);
-    
-    addListing({
-      farmerId: user.id,
-      farmerName: user.name,
-      commodity,
-      grade,
-      quantityKg: parseInt(quantity),
-      pricePerKg: parseInt(price),
-      photos: validPhotos,
-      locationLabel: `${user.region} Farm`,
-      region: user.region,
-      status: 'Active',
-    });
-    
-    toast({ 
-      title: 'Success!', 
-      description: `Your ${commodity} listing is now live in the marketplace.` 
-    });
-    navigate('/farmer/listings');
+    try {
+      setIsSubmitting(true);
+      let validPhotos: string[] = [];
+      let photoPaths: string[] = [];
+
+      if (imageSource === 'library') {
+        if (!selectedLibraryImage) {
+          toast({
+            title: 'Image required',
+            description: 'Please upload an image or choose one from the library.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        validPhotos = [selectedLibraryImage.imageUrl];
+        photoPaths = selectedLibraryImage.imagePath ? [selectedLibraryImage.imagePath] : [];
+      } else {
+        if (uploadedPhotoObjects.length === 0) {
+          toast({
+            title: 'Image required',
+            description: 'Please upload an image or choose one from the library.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const uploaded = await Promise.all(uploadedPhotoObjects.map((file) => uploadFarmerProductImage(user.id, file)));
+        validPhotos = uploaded.map((item) => item.url);
+        photoPaths = uploaded.map((item) => item.path);
+      }
+
+      await createListing({
+        farmerId: user.id,
+        farmerName: user.name,
+        commodity,
+        grade,
+        quantityKg: parseFloat(quantity),
+        pricePerKg: parseFloat(price),
+        photos: validPhotos,
+        photoPaths,
+        photoSource: imageSource,
+        libraryImageId: imageSource === 'library' ? selectedLibraryImage?.id : null,
+        locationLabel: `${user.region} Farm`,
+        region: user.region,
+        status: 'Active',
+      });
+
+      toast({ 
+        title: 'Success!', 
+        description: `Your ${commodity} listing is now live in the marketplace.` 
+      });
+      navigate(listingsPath);
+    } catch (error: any) {
+      console.error('[CreateListing] Failed to publish listing', {
+        commodity,
+        grade,
+        imageSource,
+        hasSelectedLibraryImage: Boolean(selectedLibraryImage),
+        uploadedPhotoCount: uploadedPhotoObjects.length,
+        error,
+      });
+      toast({
+        title: 'Unable to publish listing',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!user) return;
-    
-    // Save as draft - minimal validation
-    const validPhotos = photos.filter(photo => photo && photo.length > 0);
-    
-    addListing({
-      farmerId: user.id,
-      farmerName: user.name,
-      commodity,
-      grade,
-      quantityKg: parseInt(quantity || '0'),
-      pricePerKg: parseInt(price || '0'),
-      photos: validPhotos,
-      locationLabel: `${user.region} Farm`,
-      region: user.region,
-      status: 'Draft',
-    });
-    
-    toast({ 
-      title: 'Draft saved', 
-      description: 'Your listing has been saved as a draft. You can publish it later.' 
-    });
-    navigate('/farmer/listings');
+
+    try {
+      setIsSubmitting(true);
+      let validPhotos: string[] = [];
+      let photoPaths: string[] = [];
+
+      if (imageSource === 'library') {
+        if (selectedLibraryImage) {
+          validPhotos = [selectedLibraryImage.imageUrl];
+          photoPaths = selectedLibraryImage.imagePath ? [selectedLibraryImage.imagePath] : [];
+        }
+      } else if (uploadedPhotoObjects.length > 0) {
+        const uploaded = await Promise.all(uploadedPhotoObjects.map((file) => uploadFarmerProductImage(user.id, file)));
+        validPhotos = uploaded.map((item) => item.url);
+        photoPaths = uploaded.map((item) => item.path);
+      }
+
+      await createListing({
+        farmerId: user.id,
+        farmerName: user.name,
+        commodity,
+        grade,
+        quantityKg: parseFloat(quantity || '0'),
+        pricePerKg: parseFloat(price || '0'),
+        photos: validPhotos,
+        photoPaths,
+        photoSource: imageSource,
+        libraryImageId: imageSource === 'library' ? selectedLibraryImage?.id : null,
+        locationLabel: `${user.region} Farm`,
+        region: user.region,
+        status: 'Draft',
+      });
+
+      toast({ 
+        title: 'Draft saved', 
+        description: 'Your listing has been saved as a draft. You can publish it later.' 
+      });
+      navigate(listingsPath);
+    } catch (error: any) {
+      console.error('[CreateListing] Failed to save draft listing', {
+        commodity,
+        grade,
+        imageSource,
+        hasSelectedLibraryImage: Boolean(selectedLibraryImage),
+        uploadedPhotoCount: uploadedPhotoObjects.length,
+        error,
+      });
+      toast({
+        title: 'Unable to save draft',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <FarmerLayout>
+    <LayoutComponent>
       <div className="max-w-md mx-auto animate-fade-up">
         <button onClick={handleBack} className="flex items-center gap-2 text-muted-foreground mb-6">
           <ArrowLeft className="w-5 h-5" /> Back
@@ -150,7 +274,7 @@ const CreateListing = () => {
               <div className="flex-1">
                 <p className="font-semibold text-foreground mb-1">Verification Required</p>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Complete KYC verification to publish listings. You can save as draft without verification.
+                    Complete KYC verification to publish listings. You can save as draft without verification.
                 </p>
                 <button
                   onClick={() => navigate('/farmer/kyc')}
@@ -183,9 +307,10 @@ const CreateListing = () => {
           <div className="space-y-4">
             <h2 className="text-xl font-display font-bold text-foreground">How much {commodity}?</h2>
             <div className="relative">
-              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Enter quantity" className="w-full px-4 py-4 pr-12 bg-card border border-border rounded-xl text-foreground text-lg min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary" />
+              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Enter quantity" min="0.01" step="0.01" className="w-full px-4 py-4 pr-12 bg-card border border-border rounded-xl text-foreground text-lg min-h-[52px] focus:outline-none focus:ring-2 focus:ring-primary" />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">kg</span>
             </div>
+            <p className="text-xs text-muted-foreground">You can list any available stock volume. There is no fixed 100kg cap in the app.</p>
             <button onClick={handleNext} disabled={!quantity} className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]">Continue</button>
           </div>
         )}
@@ -193,21 +318,58 @@ const CreateListing = () => {
         {step === 2 && (
           <div className="space-y-4">
             <h2 className="text-xl font-display font-bold text-foreground">Add photo</h2>
-            <p className="text-muted-foreground text-sm">Upload a clear photo of your produce</p>
-            <FileUploader files={photos} onFilesChange={setPhotos} maxFiles={1} />
-            {photos.length > 0 && photos[0] && (
+            <p className="text-muted-foreground text-sm">Upload your own produce photo or choose one from the image library</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setImageSource('upload')}
+                className={`p-3 rounded-xl border text-sm font-medium transition-all ${imageSource === 'upload' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-foreground'}`}
+              >
+                Upload my own image
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageSource('library')}
+                className={`p-3 rounded-xl border text-sm font-medium transition-all ${imageSource === 'library' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-foreground'}`}
+              >
+                Choose from library
+              </button>
+            </div>
+
+            {imageSource === 'upload' ? (
+              <FileUploader
+                files={uploadedPhotos}
+                onFilesChange={setUploadedPhotos}
+                fileObjects={uploadedPhotoObjects}
+                onFileObjectsChange={setUploadedPhotoObjects}
+                maxFiles={1}
+              />
+            ) : (
+              <ProductImageLibraryPicker
+                images={libraryImages}
+                selectedImageId={selectedLibraryImage?.id}
+                onSelect={setSelectedLibraryImage}
+                loading={libraryLoading}
+                emptyMessage="No active library images are available yet. Ask an admin to upload produce images or switch to your own upload."
+              />
+            )}
+
+            {previewPhotos.length > 0 && previewPhotos[0] && (
               <div className="mt-4 p-4 bg-muted/50 rounded-xl border border-border">
-                <p className="text-sm font-medium text-foreground mb-2">Uploaded Photo Preview</p>
+                <p className="text-sm font-medium text-foreground mb-2">
+                  {imageSource === 'library' ? 'Selected Library Image' : 'Uploaded Photo Preview'}
+                </p>
                 <div className="relative group">
                   <img
-                    src={photos[0]}
+                    src={previewPhotos[0]}
                     alt="Produce photo"
                     className="w-full h-64 object-cover rounded-xl cursor-pointer hover:opacity-90 transition-opacity border-2 border-primary"
                     onClick={() => {
                       // Open image in new tab for full view
                       const newWindow = window.open();
                       if (newWindow) {
-                        newWindow.document.write(`<img src="${photos[0]}" style="max-width: 100%; height: auto;" />`);
+                        newWindow.document.write(`<img src="${previewPhotos[0]}" style="max-width: 100%; height: auto;" />`);
                       }
                     }}
                   />
@@ -221,7 +383,7 @@ const CreateListing = () => {
             )}
             <button 
               onClick={handleNext} 
-              disabled={photos.length === 0}
+              disabled={previewPhotos.length === 0}
               className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]"
             >
               Continue
@@ -261,7 +423,7 @@ const CreateListing = () => {
               <div 
                 className="relative w-full h-48 rounded-xl bg-muted mb-4 flex items-center justify-center overflow-hidden group cursor-pointer hover:opacity-90 transition-opacity border-2 border-primary"
                 onClick={() => {
-                  if (photos.length > 0 && photos[0]) {
+                  if (previewPhotos.length > 0 && previewPhotos[0]) {
                     const newWindow = window.open();
                     if (newWindow) {
                       newWindow.document.write(`
@@ -274,7 +436,7 @@ const CreateListing = () => {
                             </style>
                           </head>
                           <body>
-                            <img src="${photos[0]}" alt="${commodity}" />
+                            <img src="${previewPhotos[0]}" alt="${commodity}" />
                           </body>
                         </html>
                       `);
@@ -282,10 +444,10 @@ const CreateListing = () => {
                   }
                 }}
               >
-                {photos.length > 0 && photos[0] ? (
+                {previewPhotos.length > 0 && previewPhotos[0] ? (
                   <>
                     <img 
-                      src={photos[0]} 
+                      src={previewPhotos[0]} 
                       alt={commodity} 
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -315,13 +477,22 @@ const CreateListing = () => {
                 </div>
                 
                 <div className="pt-3 border-t border-border">
-                  <p className="text-2xl font-bold text-primary">{formatNaira(parseInt(price || '0'))}/kg</p>
-                  <p className="text-sm text-muted-foreground mt-1">Total value: {formatNaira(parseInt(quantity || '0') * parseInt(price || '0'))}</p>
+                  <p className="text-2xl font-bold text-primary">{formatNaira(parseFloat(price || '0'))}/kg</p>
+                  <p className="text-sm text-muted-foreground mt-1">Total value: {formatNaira(parseFloat(quantity || '0') * parseFloat(price || '0'))}</p>
                 </div>
                 
                 <div className="pt-3 border-t border-border">
                   <p className="text-sm text-muted-foreground">Location</p>
                   <p className="font-medium text-foreground">{user?.region} Farm</p>
+                </div>
+
+                <div className="pt-3 border-t border-border">
+                  <p className="text-sm text-muted-foreground">Image source</p>
+                  <p className="font-medium text-foreground">
+                    {imageSource === 'library'
+                      ? `${selectedLibraryImage?.name || 'Library image'} from the product image library`
+                      : 'Custom farmer upload'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -336,24 +507,25 @@ const CreateListing = () => {
                 </button>
                 <button 
                   onClick={handleSaveDraft} 
+                  disabled={isSubmitting}
                   className="flex-1 py-4 bg-muted text-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                 >
-                  <Save className="w-5 h-5" /> Save Draft
+                  <Save className="w-5 h-5" /> {isSubmitting ? 'Saving...' : 'Save Draft'}
                 </button>
               </div>
               <button 
                 onClick={handlePublish} 
-                disabled={!price || !quantity || !isKYCApproved} 
+                disabled={!price || !quantity || !isKYCApproved || isSubmitting} 
                 className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
               >
                 <Check className="w-5 h-5" /> 
-                {isKYCApproved ? 'Publish Listing' : 'KYC Required to Publish'}
+                {isSubmitting ? 'Publishing...' : isKYCApproved ? 'Publish Listing' : 'KYC Required to Publish'}
               </button>
             </div>
           </div>
         )}
       </div>
-    </FarmerLayout>
+    </LayoutComponent>
   );
 };
 

@@ -1,27 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, 
   Users, 
   Package,
+  PlusCircle,
+  Image as ImageIcon,
   ShoppingCart,
   Truck,
   CreditCard,
   FileText,
   Menu,
-  Bell,
   LogOut,
   X,
   Settings,
-  Shield,
   AlertCircle,
-  CheckCircle
 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { getAppState, getKYCByUserId } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
 import { SignOutModal } from '@/components/ui/SignOutModal';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { getKycRecordById } from '@/services/kycService';
+import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead } from '@/services/notificationService';
+import { AppNotification } from '@/types';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -31,6 +33,8 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
   { icon: Users, label: 'Users', path: '/admin/users' },
   { icon: Package, label: 'Listings', path: '/admin/listings' },
+  { icon: PlusCircle, label: 'Create Listing', path: '/admin/create-listing' },
+  { icon: ImageIcon, label: 'Media Library', path: '/admin/media-library' },
   { icon: ShoppingCart, label: 'Orders', path: '/admin/orders' },
   { icon: AlertCircle, label: 'Disputes', path: '/admin/disputes' },
   { icon: Truck, label: 'Logistics', path: '/admin/logistics' },
@@ -44,121 +48,102 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [showSignOutModal, setShowSignOutModal] = React.useState(false);
-
-  // Redirect if not admin
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
-    if (user.role !== 'admin') {
-      // Redirect to appropriate dashboard
-      switch (user.role) {
-        case 'farmer':
-          navigate('/farmer/dashboard');
-          break;
-        case 'buyer':
-          navigate('/buyer/dashboard');
-          break;
-        case 'agent':
-          navigate('/agent/dashboard');
-          break;
-        default:
-          navigate('/auth');
-      }
-    }
-  }, [user, navigate]);
-  const [notificationOpen, setNotificationOpen] = React.useState(false);
-  const [notifications, setNotifications] = React.useState<Array<{
-    id: string;
-    type: 'kyc' | 'order' | 'listing';
-    title: string;
-    message: string;
-    timestamp: string;
-    read: boolean;
-    link?: string;
-  }>>([]);
+  const [notifications, setNotifications] = React.useState<AppNotification[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
-  // Generate notifications with refresh mechanism
-  const [refreshKey, setRefreshKey] = useState(0);
-  
   useEffect(() => {
-    const refreshData = () => setRefreshKey(prev => prev + 1);
-    
-    // Refresh on mount
-    refreshData();
-    
-    // Refresh when window gains focus
-    window.addEventListener('focus', refreshData);
-    
-    // Refresh when localStorage changes
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'farmsquare_state') refreshData();
-    };
-    window.addEventListener('storage', handleStorageChange);
-    
-    // Refresh on custom events
-    window.addEventListener('farmsquare:state-changed', refreshData);
-    
-    // Refresh every 2 seconds
-    const interval = setInterval(refreshData, 2000);
-    
-    return () => {
-      window.removeEventListener('focus', refreshData);
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('farmsquare:state-changed', refreshData);
-      clearInterval(interval);
-    };
-  }, []);
-  
-  useEffect(() => {
-    const state = getAppState();
-    const newNotifications: typeof notifications = [];
-    
-    // Check for pending KYC reviews
-    const pendingKYC = state.kycData.filter(k => k.status === 'IN_REVIEW');
-    if (pendingKYC.length > 0) {
-      pendingKYC.forEach(kyc => {
-        const kycUser = [...state.farmers, ...state.buyers].find(u => u.id === kyc.userId);
-        if (kycUser) {
-          newNotifications.push({
-            id: `kyc_${kyc.userId}`,
-            type: 'kyc',
-            title: 'KYC Review Required',
-            message: `${kycUser.name} submitted KYC documents for review`,
-            timestamp: kyc.submittedAt || new Date().toISOString(),
-            read: false,
-            link: `/admin/users/${kyc.userId}/kyc`
-          });
+    let active = true;
+
+    const loadNotifications = async () => {
+      try {
+        setNotificationLoading(true);
+        setNotificationError(null);
+        const liveNotifications = await getNotificationsForUser(user?.id, user?.role);
+        if (!active) {
+          return;
         }
-      });
+        setNotifications(liveNotifications);
+      } catch (error) {
+        console.error('[AdminLayout] Failed to load notifications', error);
+        if (active) {
+          setNotifications([]);
+          setNotificationError(error instanceof Error ? error.message : 'Failed to load notifications.');
+        }
+      } finally {
+        if (active) {
+          setNotificationLoading(false);
+        }
+      }
+    };
+
+    if (user?.role === 'admin') {
+      void loadNotifications();
+    } else {
+      setNotifications([]);
+      setNotificationLoading(false);
+      setNotificationError(null);
     }
 
-    // Check for pending orders
-    const pendingOrders = state.orders.filter(o => o.status === 'Pending');
-    if (pendingOrders.length > 0) {
-      newNotifications.push({
-        id: 'pending_orders',
-        type: 'order',
-        title: `${pendingOrders.length} Pending Order${pendingOrders.length > 1 ? 's' : ''}`,
-        message: `${pendingOrders.length} order${pendingOrders.length > 1 ? 's' : ''} awaiting farmer response`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/admin/orders'
-      });
+    return () => {
+      active = false;
+    };
+  }, [location.pathname, user?.id, user?.role]);
+
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+
+  const handleNotificationClick = async (notification: AppNotification) => {
+    try {
+      if (!notification.isRead) {
+        await markNotificationRead(notification.id);
+        setNotifications((current) =>
+          current.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+        );
+      }
+
+      if (notification.entityType === 'kyc_record' && notification.entityId) {
+        const record = await getKycRecordById(notification.entityId);
+        if (record?.userId) {
+          navigate(`/admin/users/${record.userId}/kyc`);
+          return;
+        }
+      }
+
+      if (notification.entityType === 'profile' && notification.entityId) {
+        navigate(`/admin/users/${notification.entityId}/kyc`);
+        return;
+      }
+
+      if (notification.type === 'KYC_SUBMITTED') {
+        navigate('/admin/users');
+      }
+    } catch (error) {
+      console.error('[AdminLayout] Failed to open notification', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to open notification.');
     }
+  };
 
-    setNotifications(newNotifications);
-  }, [location.pathname, refreshKey]);
+  const handleMarkNotificationRead = async (notification: AppNotification) => {
+    try {
+      await markNotificationRead(notification.id);
+      setNotifications((current) =>
+        current.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+      );
+    } catch (error) {
+      console.error('[AdminLayout] Failed to mark notification as read', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to update notification.');
+    }
+  };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  const handleNotificationClick = (notification: typeof notifications[0]) => {
-    if (notification.link) {
-      navigate(notification.link);
-      setNotificationOpen(false);
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await markAllNotificationsRead(user?.id, user?.role);
+      setNotifications((current) => current.map((notification) => ({ ...notification, isRead: true })));
+    } catch (error) {
+      console.error('[AdminLayout] Failed to mark all notifications as read', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to update notifications.');
     }
   };
 
@@ -289,80 +274,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           </div>
           
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="relative">
-              <button 
-                onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5 text-foreground" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-destructive text-white rounded-full text-xs font-bold flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-              
-              {/* Notification Dropdown */}
-              {notificationOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setNotificationOpen(false)}
-                  />
-                  <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-border flex items-center justify-between">
-                      <h3 className="font-semibold text-foreground">Notifications</h3>
-                      {unreadCount > 0 && (
-                        <span className="text-xs text-muted-foreground">{unreadCount} new</span>
-                      )}
-                    </div>
-                    <div className="overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-8 text-center">
-                          <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                          <p className="text-sm text-muted-foreground">No notifications</p>
-                        </div>
-                      ) : (
-                        notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            onClick={() => handleNotificationClick(notification)}
-                            className={cn(
-                              "w-full p-4 text-left border-b border-border hover:bg-muted/50 transition-colors",
-                              !notification.read && "bg-primary/5"
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                                notification.type === 'kyc' && "bg-farm-warning/10",
-                                notification.type === 'order' && "bg-farm-info/10",
-                                notification.type === 'listing' && "bg-primary/10"
-                              )}>
-                                {notification.type === 'kyc' && <Shield className="w-5 h-5 text-farm-warning" />}
-                                {notification.type === 'order' && <ShoppingCart className="w-5 h-5 text-farm-info" />}
-                                {notification.type === 'listing' && <Package className="w-5 h-5 text-primary" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-foreground text-sm mb-1">{notification.title}</p>
-                                <p className="text-xs text-muted-foreground line-clamp-2">{notification.message}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {new Date(notification.timestamp).toLocaleDateString()}
-                                </p>
-                              </div>
-                              {!notification.read && (
-                                <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
-                              )}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              loading={notificationLoading}
+              errorMessage={notificationError}
+              onNotificationClick={(notification) => void handleNotificationClick(notification)}
+              onMarkRead={(notification) => void handleMarkNotificationRead(notification)}
+              onMarkAllRead={() => void handleMarkAllNotificationsRead()}
+            />
             <button 
               onClick={() => navigate('/admin/profile')}
               className="w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
@@ -385,9 +305,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         <SignOutModal
           isOpen={showSignOutModal}
           onClose={() => setShowSignOutModal(false)}
-          onConfirm={() => {
-            logout();
-            window.location.href = '/';
+          onConfirm={async () => {
+            await logout();
           }}
           userName={user?.name}
         />

@@ -1,328 +1,395 @@
-/**
- * Supabase Auth Service - REAL Authentication
- * 
- * Connects to Supabase Auth for email/password sign-up/sign-in.
- * Automatically creates a profile row in the `profiles` table on sign-up.
- */
-
-import { supabase } from '@/lib/supabase';
 import { UserRole } from '@/types';
+import { getSupabaseClient } from '@/lib/supabase';
+import { clearProfileCache, ensureProfileExists, getProfileById, mapProfileToUser } from '@/services/profileService';
+import { ensureWalletExists } from '@/services/walletService';
+import type { AuthError, AuthUser, SignInParams, SignUpParams } from '@/services/localAuthService';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+const authBootstrapCache = new Map<string, Promise<AuthUser | null>>();
 
-export interface SignUpParams {
-  email: string;
-  password: string;
-  fullName: string;
-  phone: string;
-  role: UserRole;
-  region: string;
-}
+const normalizeRole = (value: unknown): UserRole | null => {
+  if (value === 'buyer' || value === 'farmer' || value === 'agent' || value === 'admin') {
+    return value;
+  }
 
-export interface SignInParams {
-  email: string;
-  password: string;
-}
+  return null;
+};
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  role: UserRole;
-  fullName: string;
-  region: string;
-  phone: string;
-  kycStatus: string;
-}
+const mapProfileToAuthUser = (profile: Awaited<ReturnType<typeof getProfileById>> extends infer T
+  ? Exclude<T, null>
+  : never): AuthUser => {
+  const mappedUser = mapProfileToUser(profile);
+  return {
+    id: mappedUser.id,
+    email: mappedUser.email || profile.email || '',
+    role: mappedUser.role,
+    fullName: mappedUser.name,
+    region: mappedUser.region,
+    phone: mappedUser.phone,
+    kycStatus: mappedUser.kycStatus,
+  };
+};
 
-export interface AuthError {
-  message: string;
-  code?: string;
-}
+const toAuthUser = async (userId: string): Promise<AuthUser | null> => {
+  const profile = await getProfileById(userId);
+  if (!profile) {
+    return null;
+  }
 
-// ─── Sign Up ─────────────────────────────────────────────────────────────────
+  return mapProfileToAuthUser(profile);
+};
+
+const bootstrapAuthenticatedUser = async (
+  authUser: {
+    id: string;
+    email?: string | null;
+    user_metadata?: Record<string, any>;
+  },
+  fallback?: Partial<SignUpParams>
+): Promise<AuthUser | null> => {
+  const existingRequest = authBootstrapCache.get(authUser.id);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = (async () => {
+    const profile = await ensureProfileAndWallet(authUser, fallback);
+    const currentUser = mapProfileToAuthUser(profile);
+    console.log('[SupabaseAuth] Profile fetch resolved', {
+      userId: authUser.id,
+      role: currentUser?.role ?? null,
+    });
+    return currentUser;
+  })();
+
+  authBootstrapCache.set(authUser.id, request);
+
+  try {
+    return await request;
+  } finally {
+    authBootstrapCache.delete(authUser.id);
+  }
+};
+
+const ensureProfileAndWallet = async (
+  authUser: {
+    id: string;
+    email?: string | null;
+    user_metadata?: Record<string, any>;
+  },
+  fallback?: Partial<SignUpParams>
+) => {
+  const metadata = authUser.user_metadata || {};
+  const role = normalizeRole(metadata.role) || normalizeRole(fallback?.role) || 'buyer';
+
+  const profile = await ensureProfileExists({
+    id: authUser.id,
+    email: authUser.email || fallback?.email || null,
+    fullName: metadata.full_name || fallback?.fullName || authUser.email || null,
+    role,
+    region: metadata.region || fallback?.region || 'Lagos',
+    phone: metadata.phone || null,
+  });
+
+  try {
+    await ensureWalletExists(profile.id);
+  } catch (error) {
+    console.warn('[SupabaseAuth] Wallet bootstrap failed; continuing login without blocking access', {
+      userId: profile.id,
+      role: profile.role,
+      error,
+    });
+  }
+
+  return profile;
+};
+
+const toAuthError = (error: any, fallbackMessage: string): AuthError => ({
+  message: error?.message || fallbackMessage,
+  code: error?.code,
+});
+
+const isEmailConfirmationError = (error: any) => {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('email') && (message.includes('confirm') || message.includes('verified'));
+};
+
+const isAlreadyRegisteredError = (error: any) => {
+  const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toLowerCase();
+  return (
+    message.includes('already registered') ||
+    message.includes('user already registered') ||
+    code === 'user_already_exists'
+  );
+};
 
 export const signUp = async (
   params: SignUpParams
 ): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
   try {
-    // 1. Create auth user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: params.email,
+    if (!['buyer', 'farmer'].includes(params.role)) {
+      return {
+        user: null,
+        error: {
+          message: 'Only farmers and buyers can self-register.',
+          code: 'ROLE_NOT_ALLOWED',
+        },
+      };
+    }
+
+    const supabase = getSupabaseClient();
+    const signUpResult = await supabase.auth.signUp({
+      email: params.email.toLowerCase(),
       password: params.password,
       options: {
         data: {
           full_name: params.fullName,
-          phone: params.phone,
           role: params.role,
           region: params.region,
         },
       },
     });
 
-    if (authError) {
+    if (signUpResult.error) {
+      if (isAlreadyRegisteredError(signUpResult.error)) {
+        const signInResult = await supabase.auth.signInWithPassword({
+          email: params.email.toLowerCase(),
+          password: params.password,
+        });
+
+        if (signInResult.error || !signInResult.data.user) {
+          return {
+            user: null,
+            error: toAuthError(
+              signInResult.error || signUpResult.error,
+              'This account already exists. Try signing in instead.'
+            ),
+          };
+        }
+
+        const recoveredUser = await bootstrapAuthenticatedUser(signInResult.data.user, params);
+
+        if (!recoveredUser) {
+          return {
+            user: null,
+            error: {
+              message: 'Your account exists, but the profile could not be restored automatically.',
+              code: 'PROFILE_RECOVERY_FAILED',
+            },
+          };
+        }
+
+        console.log('[SupabaseAuth] Signup recovered existing account', {
+          userId: signInResult.data.user.id,
+          role: recoveredUser.role,
+        });
+        return { user: recoveredUser, error: null };
+      }
+
+      return {
+        user: null,
+        error: toAuthError(signUpResult.error, 'Unable to create your account.'),
+      };
+    }
+
+    let authUser = signUpResult.data.user;
+    if (!authUser) {
       return {
         user: null,
         error: {
-          message: authError.message,
-          code: authError.code || 'AUTH_ERROR',
+          message: 'Sign up completed but no user session was returned.',
+          code: 'SIGNUP_NO_USER',
         },
       };
     }
 
-    if (!authData.user) {
+    if (!signUpResult.data.session) {
+      const signInResult = await supabase.auth.signInWithPassword({
+        email: params.email.toLowerCase(),
+        password: params.password,
+      });
+
+      if (signInResult.error) {
+        if (isEmailConfirmationError(signInResult.error)) {
+          return {
+            user: null,
+            error: {
+              message: 'Your account was created. Confirm your email first, then sign in.',
+              code: 'EMAIL_CONFIRMATION_REQUIRED',
+            },
+          };
+        }
+
+        return {
+          user: null,
+          error: toAuthError(
+            signInResult.error,
+            'Account created, but automatic sign in failed. Please log in manually.'
+          ),
+        };
+      }
+
+      authUser = signInResult.data.user;
+    }
+
+    const currentUser = await bootstrapAuthenticatedUser(authUser, params);
+
+    if (!currentUser) {
       return {
         user: null,
-        error: { message: 'Sign-up succeeded but no user returned', code: 'NO_USER' },
+        error: {
+          message: 'Your account was created, but your profile could not be loaded.',
+          code: 'PROFILE_LOAD_FAILED',
+        },
       };
     }
 
-    // 2. Insert profile row (the DB trigger in migration 004 may do this too,
-    //    but we do it explicitly to set role/region immediately)
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: authData.user.id,
-      full_name: params.fullName,
-      phone: params.phone,
-      email: params.email,
-      role: params.role,
-      address: params.region,
-      state: params.region,
-    });
-
-    if (profileError) {
-      console.warn('Profile insert warning (may already exist via trigger):', profileError.message);
-    }
-
-    // 3. Create wallet for new user
-    const { error: walletError } = await supabase.from('wallets').upsert({
-      user_id: authData.user.id,
-      available: 0,
-      pending: 0,
-      locked: 0,
-      withdrawn: 0,
-      currency: '₦',
-    });
-
-    if (walletError) {
-      console.warn('Wallet creation warning:', walletError.message);
-    }
-
-    const user: AuthUser = {
-      id: authData.user.id,
-      email: params.email,
-      role: params.role,
-      fullName: params.fullName,
-      region: params.region,
-      phone: params.phone,
-      kycStatus: params.role === 'admin' ? 'APPROVED' : 'NOT_STARTED',
-    };
-
-    return { user, error: null };
-  } catch (err: any) {
+    console.log('[SupabaseAuth] Signup success', { userId: authUser.id, role: currentUser.role });
+    return { user: currentUser, error: null };
+  } catch (error: any) {
     return {
       user: null,
-      error: { message: err.message || 'Unexpected error during sign-up', code: 'UNKNOWN' },
+      error: toAuthError(error, 'An unexpected error occurred during signup.'),
     };
   }
 };
-
-// ─── Sign In ─────────────────────────────────────────────────────────────────
 
 export const signIn = async (
   params: SignInParams
 ): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: params.email,
+    const supabase = getSupabaseClient();
+    const result = await supabase.auth.signInWithPassword({
+      email: params.email.toLowerCase(),
       password: params.password,
     });
+
+    if (result.error || !result.data.user) {
+      return {
+        user: null,
+        error: toAuthError(result.error, 'Invalid email or password.'),
+      };
+    }
+
+    const currentUser = await bootstrapAuthenticatedUser(result.data.user);
+
+    if (!currentUser) {
+      return {
+        user: null,
+        error: {
+          message: 'Your profile could not be loaded after sign in.',
+          code: 'PROFILE_LOAD_FAILED',
+        },
+      };
+    }
+
+    console.log('[SupabaseAuth] Login success', { userId: result.data.user.id, role: currentUser.role });
+    return { user: currentUser, error: null };
+  } catch (error: any) {
+    console.error('[SupabaseAuth] Login failed', {
+      email: params.email?.toLowerCase?.() || params.email,
+      error,
+    });
+    return {
+      user: null,
+      error: toAuthError(error, 'An unexpected error occurred during signin.'),
+    };
+  }
+};
+
+export const signOut = async (): Promise<{ error: AuthError | null }> => {
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      return { error: toAuthError(error, 'Unable to sign out right now.') };
+    }
+
+    authBootstrapCache.clear();
+    clearProfileCache();
+    console.log('[SupabaseAuth] Logout success');
+    return { error: null };
+  } catch (error: any) {
+    return {
+      error: toAuthError(error, 'An unexpected error occurred during signout.'),
+    };
+  }
+};
+
+export const getCurrentUser = async (): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
+  try {
+    const supabase = getSupabaseClient();
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
 
     if (error) {
       return {
         user: null,
-        error: { message: error.message, code: error.code || 'AUTH_ERROR' },
+        error: toAuthError(error, 'Unable to load the current session.'),
       };
     }
 
-    if (!data.user) {
-      return {
-        user: null,
-        error: { message: 'Sign-in succeeded but no user returned', code: 'NO_USER' },
-      };
+    const user = session?.user ?? null;
+    if (!user) {
+      console.log('[SupabaseAuth] No active session found');
+      return { user: null, error: null };
     }
 
-    // Fetch profile from DB
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .maybeSingle();
+    try {
+      const currentUser = await bootstrapAuthenticatedUser(user);
+      console.log('[SupabaseAuth] Current user resolved', { userId: user.id, role: currentUser?.role ?? null });
+      return { user: currentUser, error: null };
+    } catch (bootstrapError) {
+      console.warn('[SupabaseAuth] Bootstrap failed during current-user lookup; attempting direct profile recovery', {
+        userId: user.id,
+        bootstrapError,
+      });
 
-    if (profileError || !profile) {
-      // Fallback to user_metadata
-      const meta = data.user.user_metadata || {};
-      return {
-        user: {
-          id: data.user.id,
-          email: data.user.email || params.email,
-          role: (meta.role as UserRole) || 'buyer',
-          fullName: meta.full_name || 'User',
-          region: meta.region || 'Lagos',
-          phone: meta.phone || '',
-          kycStatus: 'NOT_STARTED',
-        },
-        error: null,
-      };
+      const directProfile = await getProfileById(user.id, { forceRefresh: true });
+      if (directProfile) {
+        const recoveredUser = mapProfileToAuthUser(directProfile);
+        console.log('[SupabaseAuth] Current user recovered from profile', {
+          userId: recoveredUser.id,
+          role: recoveredUser.role,
+        });
+        return { user: recoveredUser, error: null };
+      }
+
+      throw bootstrapError;
     }
-
-    return {
-      user: {
-        id: profile.id,
-        email: profile.email || data.user.email || params.email,
-        role: profile.role as UserRole,
-        fullName: profile.full_name,
-        region: profile.state || profile.address || 'Lagos',
-        phone: profile.phone,
-        kycStatus: profile.kyc_status || 'NOT_STARTED',
-      },
-      error: null,
-    };
-  } catch (err: any) {
+  } catch (error: any) {
     return {
       user: null,
-      error: { message: err.message || 'Unexpected error during sign-in', code: 'UNKNOWN' },
+      error: toAuthError(error, 'Unable to load the current user.'),
     };
   }
 };
-
-// ─── Sign Out ────────────────────────────────────────────────────────────────
-
-export const signOut = async (): Promise<{ error: AuthError | null }> => {
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    return { error: { message: error.message, code: 'SIGN_OUT_ERROR' } };
-  }
-  return { error: null };
-};
-
-// ─── Get Current User ────────────────────────────────────────────────────────
-
-export const getCurrentUser = async (): Promise<{
-  user: AuthUser | null;
-  error: AuthError | null;
-}> => {
-  try {
-    const {
-      data: { user: authUser },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !authUser) {
-      return { user: null, error: null }; // Not logged in
-    }
-
-    // Fetch profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .maybeSingle();
-
-    if (profile) {
-      return {
-        user: {
-          id: profile.id,
-          email: profile.email || authUser.email || '',
-          role: profile.role as UserRole,
-          fullName: profile.full_name,
-          region: profile.state || profile.address || 'Lagos',
-          phone: profile.phone,
-          kycStatus: profile.kyc_status || 'NOT_STARTED',
-        },
-        error: null,
-      };
-    }
-
-    // Fallback to user_metadata
-    const meta = authUser.user_metadata || {};
-    return {
-      user: {
-        id: authUser.id,
-        email: authUser.email || '',
-        role: (meta.role as UserRole) || 'buyer',
-        fullName: meta.full_name || 'User',
-        region: meta.region || 'Lagos',
-        phone: meta.phone || '',
-        kycStatus: 'NOT_STARTED',
-      },
-      error: null,
-    };
-  } catch (err: any) {
-    return {
-      user: null,
-      error: { message: err.message || 'Failed to get current user', code: 'UNKNOWN' },
-    };
-  }
-};
-
-// ─── Auth State Listener ─────────────────────────────────────────────────────
 
 export const onAuthStateChange = (callback: (user: AuthUser | null) => void) => {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_OUT' || !session?.user) {
+  const supabase = getSupabaseClient();
+
+  const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+    console.log('[SupabaseAuth] Auth state changed', {
+      event,
+      hasSession: Boolean(session?.user),
+      userId: session?.user?.id ?? null,
+    });
+
+    if (!session?.user) {
       callback(null);
       return;
     }
 
-    // Fetch profile for the authenticated user
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    if (profile) {
-      callback({
-        id: profile.id,
-        email: profile.email || session.user.email || '',
-        role: profile.role as UserRole,
-        fullName: profile.full_name,
-        region: profile.state || profile.address || 'Lagos',
-        phone: profile.phone,
-        kycStatus: profile.kyc_status || 'NOT_STARTED',
-      });
-    } else {
-      const meta = session.user.user_metadata || {};
-      callback({
-        id: session.user.id,
-        email: session.user.email || '',
-        role: (meta.role as UserRole) || 'buyer',
-        fullName: meta.full_name || 'User',
-        region: meta.region || 'Lagos',
-        phone: meta.phone || '',
-        kycStatus: 'NOT_STARTED',
-      });
+    try {
+      const currentUser = await bootstrapAuthenticatedUser(session.user);
+      callback(currentUser);
+    } catch (error) {
+      console.error('Auth state sync failed:', error);
+      callback(null);
     }
   });
 
-  return { data: { subscription } };
+  return { data };
 };
-
-// ─── Validators ──────────────────────────────────────────────────────────────
-
-export const validatePassword = (password: string) => {
-  if (password.length < 6) {
-    return { valid: false, message: 'Password must be at least 6 characters long' };
-  }
-  return { valid: true };
-};
-
-export const validateEmail = (email: string) => {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!re.test(email)) {
-    return { valid: false, message: 'Please enter a valid email address' };
-  }
-  return { valid: true };
-};
-

@@ -6,6 +6,8 @@ interface FileUploaderProps {
   maxFiles?: number;
   onFilesChange: (files: string[]) => void;
   files: string[];
+  fileObjects?: File[];
+  onFileObjectsChange?: (files: File[]) => void;
   className?: string;
   accept?: string; // e.g., "image/*,.pdf"
   maxSizeMB?: number; // Maximum file size in MB
@@ -16,6 +18,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   maxFiles = 3,
   onFilesChange,
   files,
+  fileObjects = [],
+  onFileObjectsChange,
   className,
   accept = 'image/*',
   maxSizeMB = 5,
@@ -47,30 +51,41 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     return true;
   };
 
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
   const handleFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const selectedFiles = e.target.files;
       if (selectedFiles) {
-        const newFiles: string[] = [...files];
-        Array.from(selectedFiles).forEach((file) => {
-          if (newFiles.length < maxFiles && validateFile(file)) {
-            // Create a data URL for preview
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              newFiles.push(reader.result as string);
-              onFilesChange([...newFiles]);
-            };
-            reader.readAsDataURL(file);
-          }
-        });
+        const capacity = Math.max(maxFiles - files.length, 0);
+        const acceptedFiles = Array.from(selectedFiles)
+          .filter((file) => validateFile(file))
+          .slice(0, capacity);
+
+        if (acceptedFiles.length === 0) {
+          return;
+        }
+
+        const previews = await Promise.all(acceptedFiles.map(readFileAsDataUrl));
+        onFilesChange([...files, ...previews]);
+        onFileObjectsChange?.([...fileObjects, ...acceptedFiles]);
       }
     },
-    [files, maxFiles, onFilesChange, maxSizeMB]
+    [fileObjects, files, maxFiles, onFileObjectsChange, onFilesChange]
   );
 
   const removeFile = (index: number) => {
     const newFiles = files.filter((_, i) => i !== index);
     onFilesChange(newFiles);
+    if (onFileObjectsChange) {
+      onFileObjectsChange(fileObjects.filter((_, i) => i !== index));
+    }
   };
 
   const getFileType = (fileDataUrl: string): 'image' | 'pdf' => {
@@ -170,17 +185,25 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
             setIsDragging(false);
             const droppedFiles = e.dataTransfer.files;
             if (droppedFiles) {
-              const newFiles: string[] = [...files];
-              Array.from(droppedFiles).forEach((file) => {
-                if (newFiles.length < maxFiles && validateFile(file)) {
-                  const reader = new FileReader();
-                  reader.onloadend = () => {
-                    newFiles.push(reader.result as string);
-                    onFilesChange([...newFiles]);
-                  };
-                  reader.readAsDataURL(file);
-                }
-              });
+              const capacity = Math.max(maxFiles - files.length, 0);
+              const acceptedFiles = Array.from(droppedFiles)
+                .filter((file) => validateFile(file))
+                .slice(0, capacity);
+
+              if (acceptedFiles.length === 0) {
+                return;
+              }
+
+              Promise.all(acceptedFiles.map(readFileAsDataUrl))
+                .then((previews) => {
+                  onFilesChange([...files, ...previews]);
+                  onFileObjectsChange?.([...fileObjects, ...acceptedFiles]);
+                })
+                .catch((uploadError) => {
+                  console.error('[FileUploader] Failed to preview files', uploadError);
+                  setError('Could not process the selected files');
+                  setTimeout(() => setError(null), 5000);
+                });
             }
           }}
         >

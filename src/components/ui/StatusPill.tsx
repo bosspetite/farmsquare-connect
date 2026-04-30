@@ -1,6 +1,27 @@
 import { cn } from '@/lib/utils';
 
-type StatusType = 'Draft' | 'Active' | 'Paused' | 'SoldOut' | 'Sold' | 'Archived' | 'Pending' | 'Accepted' | 'Rejected' | 'Processing' | 'PickupScheduled' | 'InTransit' | 'Delivered' | 'Submitted' | 'InReview' | 'Paid' | 'APPROVED' | 'NOT_STARTED';
+type StatusType =
+  | 'Draft'
+  | 'Active'
+  | 'Paused'
+  | 'SoldOut'
+  | 'Sold'
+  | 'Archived'
+  | 'Pending'
+  | 'Accepted'
+  | 'Rejected'
+  | 'Processing'
+  | 'PickupScheduled'
+  | 'InTransit'
+  | 'Delivered'
+  | 'Disputed'
+  | 'Cancelled'
+  | 'Refunded'
+  | 'Submitted'
+  | 'InReview'
+  | 'Paid'
+  | 'APPROVED'
+  | 'NOT_STARTED';
 
 interface StatusPillProps {
   status: StatusType;
@@ -21,6 +42,9 @@ const statusStyles: Record<StatusType, string> = {
   PickupScheduled: 'bg-farm-info/20 text-farm-info border border-farm-info/30',
   InTransit: 'bg-farm-warning/20 text-farm-warning border border-farm-warning/30',
   Delivered: 'status-delivered',
+  Disputed: 'bg-destructive/10 text-destructive border border-destructive/20',
+  Cancelled: 'bg-muted text-muted-foreground border border-border',
+  Refunded: 'bg-farm-warning/15 text-farm-warning border border-farm-warning/30',
   Submitted: 'status-pending',
   InReview: 'bg-farm-info/20 text-farm-info border border-farm-info/30',
   Paid: 'status-delivered',
@@ -42,6 +66,9 @@ const statusLabels: Record<StatusType, string> = {
   PickupScheduled: 'Ready for Pickup',
   InTransit: 'In Transit',
   Delivered: 'Delivered',
+  Disputed: 'Disputed',
+  Cancelled: 'Cancelled',
+  Refunded: 'Refunded',
   Submitted: 'Submitted',
   InReview: 'In Review',
   Paid: 'Paid',

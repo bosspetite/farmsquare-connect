@@ -1,25 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { 
-  Home, 
-  Package, 
-  ShoppingCart, 
-  Wallet, 
+import {
+  Home,
+  Package,
+  ShoppingCart,
+  Wallet,
   User,
   Menu,
-  Bell,
   LogOut,
   X,
-  CheckCircle,
-  AlertCircle,
-  DollarSign,
-  Settings
+  Settings,
 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { getOrdersByFarmerId, getKYCByUserId, getWalletByUserId } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
 import { SignOutModal } from '@/components/ui/SignOutModal';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { AppNotification } from '@/types';
+import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead } from '@/services/notificationService';
 
 interface FarmerLayoutProps {
   children: React.ReactNode;
@@ -38,100 +36,109 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [notificationOpen, setNotificationOpen] = React.useState(false);
   const [showSignOutModal, setShowSignOutModal] = React.useState(false);
-  const [notifications, setNotifications] = React.useState<Array<{
-    id: string;
-    type: 'order' | 'kyc' | 'wallet';
-    title: string;
-    message: string;
-    timestamp: string;
-    read: boolean;
-    link?: string;
-  }>>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Generate notifications based on user data
   useEffect(() => {
-    if (!user) return;
+    let active = true;
 
-    const newNotifications: typeof notifications = [];
-    
-    // Check for new pending orders
-    const orders = getOrdersByFarmerId(user.id);
-    const pendingOrders = orders.filter(o => o.status === 'Pending');
-    if (pendingOrders.length > 0) {
-      newNotifications.push({
-        id: 'pending_orders',
-        type: 'order',
-        title: `${pendingOrders.length} New Order${pendingOrders.length > 1 ? 's' : ''}`,
-        message: `You have ${pendingOrders.length} pending order${pendingOrders.length > 1 ? 's' : ''} requiring your attention.`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/farmer/orders'
-      });
-    }
-
-    // Check KYC status
-    const kycData = getKYCByUserId(user.id);
-    if (kycData) {
-      if (kycData.status === 'APPROVED') {
-        newNotifications.push({
-          id: 'kyc_approved',
-          type: 'kyc',
-          title: 'KYC Verification Approved',
-          message: 'Your identity verification has been approved. You can now withdraw funds.',
-          timestamp: kycData.submittedAt || new Date().toISOString(),
-          read: false,
-          link: '/farmer/kyc'
-        });
-      } else if (kycData.status === 'REJECTED') {
-        newNotifications.push({
-          id: 'kyc_rejected',
-          type: 'kyc',
-          title: 'KYC Verification Rejected',
-          message: 'Your verification documents were not approved. Please resubmit.',
-          timestamp: kycData.submittedAt || new Date().toISOString(),
-          read: false,
-          link: '/farmer/kyc'
-        });
+    const loadNotifications = async () => {
+      try {
+        setNotificationLoading(true);
+        setNotificationError(null);
+        const nextNotifications = await getNotificationsForUser(user?.id, user?.role);
+        if (!active) {
+          return;
+        }
+        setNotifications(nextNotifications);
+      } catch (error) {
+        console.error('[FarmerLayout] Failed to load notifications', error);
+        if (active) {
+          setNotifications([]);
+          setNotificationError(error instanceof Error ? error.message : 'Failed to load notifications.');
+        }
+      } finally {
+        if (active) {
+          setNotificationLoading(false);
+        }
       }
+    };
+
+    if (user?.role === 'farmer') {
+      void loadNotifications();
+    } else {
+      setNotifications([]);
+      setNotificationLoading(false);
+      setNotificationError(null);
     }
 
-    // Check wallet for recent transactions
-    const wallet = getWalletByUserId(user.id);
-    if (wallet && wallet.pending > 0) {
-      newNotifications.push({
-        id: 'pending_earnings',
-        type: 'wallet',
-        title: 'Pending Earnings',
-        message: `You have ₦${wallet.pending.toLocaleString()} in pending earnings from active orders.`,
-        timestamp: new Date().toISOString(),
-        read: false,
-        link: '/farmer/wallet'
-      });
+    return () => {
+      active = false;
+    };
+  }, [location.pathname, user?.id, user?.role]);
+
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+
+  const handleNotificationClick = async (notification: AppNotification) => {
+    try {
+      if (!notification.isRead) {
+        await markNotificationRead(notification.id);
+        setNotifications((current) =>
+          current.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+        );
+      }
+
+      if (notification.type.startsWith('KYC_')) {
+        navigate('/farmer/kyc');
+        return;
+      }
+
+      if (notification.entityType === 'order' || notification.type.includes('ORDER')) {
+        navigate('/farmer/orders');
+        return;
+      }
+
+      if (notification.entityType === 'wallet' || notification.type.includes('PAY')) {
+        navigate('/farmer/wallet');
+      }
+    } catch (error) {
+      console.error('[FarmerLayout] Failed to open notification', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to open notification.');
     }
+  };
 
-    setNotifications(newNotifications);
-  }, [user, location.pathname]);
+  const handleMarkNotificationRead = async (notification: AppNotification) => {
+    try {
+      await markNotificationRead(notification.id);
+      setNotifications((current) =>
+        current.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+      );
+    } catch (error) {
+      console.error('[FarmerLayout] Failed to mark notification as read', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to update notification.');
+    }
+  };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  const handleNotificationClick = (notification: typeof notifications[0]) => {
-    if (notification.link) {
-      navigate(notification.link);
-      setNotificationOpen(false);
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await markAllNotificationsRead(user?.id, user?.role);
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+    } catch (error) {
+      console.error('[FarmerLayout] Failed to mark all notifications as read', error);
+      setNotificationError(error instanceof Error ? error.message : 'Failed to update notifications.');
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-1 bg-card border-r border-border">
           <div className="px-6 py-5 border-b border-border">
-            <button 
+            <button
               onClick={() => navigate('/farmer/dashboard')}
               className="flex items-center gap-3 mb-1 hover:opacity-80 transition-opacity w-full text-left"
             >
@@ -140,7 +147,7 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
             </button>
             <p className="text-xs text-muted-foreground ml-13">Farmer</p>
           </div>
-          
+
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navItems.map((item) => (
               <Link
@@ -158,7 +165,7 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
               </Link>
             ))}
           </nav>
-          
+
           <div className="p-4 border-t border-border mt-auto">
             <button
               onClick={() => setShowSignOutModal(true)}
@@ -171,16 +178,12 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
         </div>
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setSidebarOpen(false)}
-          />
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border animate-slide-in-right flex flex-col">
             <div className="flex items-center justify-between px-6 py-5 border-b border-border flex-shrink-0">
-              <button 
+              <button
                 onClick={() => {
                   navigate('/farmer/dashboard');
                   setSidebarOpen(false);
@@ -197,7 +200,7 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
-            
+
             <nav className="px-4 py-6 space-y-2 flex-1 overflow-y-auto pb-20">
               {navItems.map((item) => (
                 <Link
@@ -216,7 +219,7 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
                 </Link>
               ))}
             </nav>
-            
+
             <div className="p-4 border-t border-border bg-card sticky bottom-0 z-10 flex-shrink-0">
               <button
                 onClick={() => setShowSignOutModal(true)}
@@ -230,9 +233,7 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
         </div>
       )}
 
-      {/* Main Content */}
       <div className="lg:pl-64">
-        {/* Top Bar */}
         <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-4 bg-background/95 backdrop-blur-sm border-b border-border lg:px-8">
           <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
             <button
@@ -254,90 +255,25 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="relative">
-              <button 
-                onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5 text-foreground" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-primary text-primary-foreground rounded-full text-xs font-bold flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-              
-              {/* Notification Dropdown */}
-              {notificationOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setNotificationOpen(false)}
-                  />
-                  <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-80 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-border flex items-center justify-between">
-                      <h3 className="font-semibold text-foreground">Notifications</h3>
-                      {unreadCount > 0 && (
-                        <span className="text-xs text-muted-foreground">{unreadCount} new</span>
-                      )}
-                    </div>
-                    <div className="overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-8 text-center">
-                          <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                          <p className="text-sm text-muted-foreground">No notifications</p>
-                        </div>
-                      ) : (
-                        notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            onClick={() => handleNotificationClick(notification)}
-                            className={cn(
-                              "w-full p-4 text-left border-b border-border hover:bg-muted/50 transition-colors",
-                              !notification.read && "bg-primary/5"
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                                notification.type === 'order' && "bg-farm-info/10",
-                                notification.type === 'kyc' && "bg-farm-warning/10",
-                                notification.type === 'wallet' && "bg-farm-success/10"
-                              )}>
-                                {notification.type === 'order' && <ShoppingCart className="w-5 h-5 text-farm-info" />}
-                                {notification.type === 'kyc' && <AlertCircle className="w-5 h-5 text-farm-warning" />}
-                                {notification.type === 'wallet' && <DollarSign className="w-5 h-5 text-farm-success" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-foreground text-sm mb-1">{notification.title}</p>
-                                <p className="text-xs text-muted-foreground line-clamp-2">{notification.message}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {new Date(notification.timestamp).toLocaleDateString()}
-                                </p>
-                              </div>
-                              {!notification.read && (
-                                <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
-                              )}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            <button 
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              loading={notificationLoading}
+              errorMessage={notificationError}
+              onNotificationClick={(notification) => void handleNotificationClick(notification)}
+              onMarkRead={(notification) => void handleMarkNotificationRead(notification)}
+              onMarkAllRead={() => void handleMarkAllNotificationsRead()}
+            />
+            <button
               onClick={() => navigate('/farmer/profile')}
               className="w-10 h-10 rounded-xl bg-card flex items-center justify-center hover:bg-muted transition-colors"
               aria-label="Settings"
             >
               <Settings className="w-5 h-5 text-foreground" />
             </button>
-            <button 
+            <button
               onClick={() => setShowSignOutModal(true)}
               className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors border border-destructive/20 flex-shrink-0"
               title="Sign Out"
@@ -348,21 +284,16 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
           </div>
         </header>
 
-        {/* Sign Out Modal */}
         <SignOutModal
           isOpen={showSignOutModal}
           onClose={() => setShowSignOutModal(false)}
-          onConfirm={() => {
-            logout();
-            window.location.href = '/';
+          onConfirm={async () => {
+            await logout();
           }}
           userName={user?.name}
         />
 
-        {/* Page Content */}
-        <main className="px-4 py-6 lg:px-8 pb-8">
-          {children}
-        </main>
+        <main className="px-4 py-6 lg:px-8 pb-8">{children}</main>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-web.png';
 
 const FAQPage = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
@@ -214,4 +214,3 @@ const FAQPage = () => {
 };
 
 export default FAQPage;
-

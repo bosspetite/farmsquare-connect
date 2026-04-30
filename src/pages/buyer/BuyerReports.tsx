@@ -1,6 +1,6 @@
 import { Download, FileText, BarChart3 } from 'lucide-react';
 import { BuyerLayout } from '@/components/layouts/BuyerLayout';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { getOrdersByBuyerId, formatNaira } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 

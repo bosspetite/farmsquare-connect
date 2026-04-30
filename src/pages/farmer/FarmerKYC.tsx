@@ -7,16 +7,48 @@ import { FileUploader } from '@/components/ui/FileUploader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
-import { getKYCByUserId, updateKYCData } from '@/lib/store';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 import { KYCData } from '@/types';
+import { getMyKyc, resetKycRecord, saveKycRecord, submitKyc } from '@/services/kycService';
 
 const steps = [
   { label: 'Personal Info', description: 'Basic information' },
   { label: 'Identity', description: 'ID verification' },
   { label: 'Review', description: 'Submit for review' }
 ];
+
+const getKycSubmissionMessage = (error: unknown) => {
+  const messageText =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : null;
+
+  if (!messageText) {
+    return 'Your KYC could not be submitted. Please check all required fields and try again.';
+  }
+
+  const message = messageText.toLowerCase();
+  if (message.includes('profile not found')) {
+    return 'We could not find your account profile. Please sign out and sign in again, then retry.';
+  }
+
+  if (message.includes('auth') || message.includes('session')) {
+    return 'Your session has expired. Please sign in again and retry your verification.';
+  }
+
+  if (message.includes('upload') || message.includes('document')) {
+    return 'Your KYC could not be submitted because one or more documents could not be processed. Please try again.';
+  }
+
+  if (message.includes('permission') || message.includes('row-level security')) {
+    return 'Your KYC could not be submitted right now. Please try again in a moment.';
+  }
+
+  return messageText || 'Your KYC could not be submitted. Please check all required fields and try again.';
+};
 
 const FarmerKYC = () => {
   const navigate = useNavigate();
@@ -36,49 +68,59 @@ const FarmerKYC = () => {
   
   const [selfieFile, setSelfieFile] = useState<string[]>([]);
   const [idDocumentFile, setIdDocumentFile] = useState<string[]>([]);
+  const [selfieFileObjects, setSelfieFileObjects] = useState<File[]>([]);
+  const [idDocumentFileObjects, setIdDocumentFileObjects] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Load KYC data when component mounts
   useEffect(() => {
     if (user) {
-      try {
-        const data = getKYCByUserId(user.id);
-        setKycData(data);
-        
-        // Load existing data if available
-        if (data) {
-          setFormData({
-            fullName: data.fullName || '',
-            phoneNumber: data.phoneNumber || '',
-            dateOfBirth: data.dateOfBirth || '',
-            address: data.address || '',
-            idType: data.idType || '',
-            idNumber: data.idNumber || '',
-          });
-          
-          if (data.selfieFile) setSelfieFile([data.selfieFile]);
-          if (data.idDocumentFile) setIdDocumentFile([data.idDocumentFile]);
-          
-          // Set step based on status
-          if (data.status === 'APPROVED') {
-            setStep(2);
-          } else if (data.status === 'IN_REVIEW') {
-            setStep(2);
-          } else if (data.status === 'REJECTED') {
-            setStep(0);
+      void (async () => {
+        try {
+          const data = await getMyKyc(user.id);
+          setKycData(data);
+
+          if (data) {
+            setFormData({
+              fullName: data.fullName || user.name || '',
+              phoneNumber: data.phoneNumber || user.phone || '',
+              dateOfBirth: data.dateOfBirth || '',
+              address: data.address || '',
+              idType: data.idType || '',
+              idNumber: data.idNumber || '',
+            });
+
+            if (data.selfieFile) setSelfieFile([data.selfieFile]);
+            if (data.idDocumentFile) setIdDocumentFile([data.idDocumentFile]);
+
+            if (data.status === 'APPROVED' || data.status === 'PENDING') {
+              setStep(2);
+            } else if (data.status === 'REJECTED') {
+              setStep(0);
+            }
+          } else {
+            setFormData((prev) => ({
+              ...prev,
+              fullName: user.name || '',
+              phoneNumber: user.phone || '',
+            }));
           }
-        } else {
-          // Pre-fill with user data
-          setFormData(prev => ({
+        } catch (error) {
+          console.error('Error loading KYC data:', error);
+          setFormData((prev) => ({
             ...prev,
-            fullName: user.name || '',
-            phoneNumber: user.phone || '',
+            fullName: user.name || prev.fullName,
+            phoneNumber: user.phone || prev.phoneNumber,
           }));
+          toast({
+            title: 'Could not load saved verification details',
+            description: 'You can still continue and submit your verification.',
+            variant: 'destructive',
+          });
         }
-      } catch (error) {
-        console.error('Error loading KYC data:', error);
-      }
+      })();
     }
-  }, [user]);
+  }, [user, toast]);
 
   const updateFormField = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -123,12 +165,42 @@ const FarmerKYC = () => {
   const handleNext = () => {
     if (step === 0) {
       if (validateStep1()) {
-        // Save progress
         if (user) {
-          updateKYCData(user.id, {
-            ...formData,
-            status: 'NOT_STARTED',
-          });
+          void (async () => {
+            try {
+              setIsSubmitting(true);
+              const saved = await saveKycRecord({
+                userId: user.id,
+                role: 'farmer',
+                data: {
+                  ...formData,
+                  status: 'NOT_STARTED',
+                },
+              });
+              setKycData(saved);
+              setStep(1);
+            } catch (error) {
+              console.error('Error saving KYC draft:', error);
+              setKycData((prev) => prev ?? {
+                userId: user.id,
+                userRole: 'farmer',
+                status: 'NOT_STARTED',
+                fullName: formData.fullName,
+                phoneNumber: formData.phoneNumber,
+                address: formData.address,
+                idType: formData.idType || undefined,
+                idNumber: formData.idNumber,
+              });
+              setStep(1);
+              toast({
+                title: 'Draft sync delayed',
+                description: 'You can keep going. Your verification will still be saved when you submit it.',
+              });
+            } finally {
+              setIsSubmitting(false);
+            }
+          })();
+          return;
         }
         setStep(1);
       }
@@ -146,66 +218,118 @@ const FarmerKYC = () => {
   };
 
   const handleSubmit = () => {
-    if (!user) return;
-    
-    if (!validateStep1() || !validateStep2()) {
-      setStep(0);
+    if (!user) {
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in again before submitting your verification.',
+        variant: 'destructive',
+      });
       return;
     }
     
-    try {
-      // Update KYC data with all information
-      updateKYCData(user.id, {
-        ...formData,
-        idType: formData.idType as 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD',
-        selfieFile: selfieFile[0],
-        idDocumentFile: idDocumentFile[0],
-        status: 'IN_REVIEW',
-        submittedAt: new Date().toISOString(),
+    if (!validateStep1()) {
+      console.warn('[FarmerKYC] Step 1 validation failed', {
+        fullNamePresent: Boolean(formData.fullName.trim()),
+        phoneNumberPresent: Boolean(formData.phoneNumber.trim()),
+        addressPresent: Boolean(formData.address.trim()),
       });
-      
-      // Refresh the data
-      const updatedData = getKYCByUserId(user.id);
-      setKycData(updatedData);
-      
-      toast({ 
-        title: 'KYC submitted for review', 
-        description: 'Your documents are being verified. This usually takes 24-48 hours.' 
-      });
-      
-      // Redirect to dashboard after submission
-      setTimeout(() => {
-        navigate('/farmer/dashboard');
-      }, 1500);
-    } catch (error) {
-      console.error('Error submitting KYC:', error);
-      toast({ 
-        title: 'Error', 
-        description: 'Failed to submit KYC. Please try again.',
-        variant: 'destructive' 
-      });
+      setStep(0);
+      return;
     }
+
+    if (!validateStep2()) {
+      console.warn('[FarmerKYC] Step 2 validation failed', {
+        idTypePresent: Boolean(formData.idType),
+        idNumberPresent: Boolean(formData.idNumber.trim()),
+        idDocumentPresent: idDocumentFile.length > 0,
+        selfiePresent: selfieFile.length > 0,
+      });
+      setStep(1);
+      return;
+    }
+    
+    void (async () => {
+      try {
+        setIsSubmitting(true);
+        console.log('[FarmerKYC] Submitting verification', {
+          userId: user.id,
+          role: user.role,
+          sessionEmail: user.email,
+          validation: {
+            fullNamePresent: Boolean(formData.fullName.trim()),
+            phoneNumberPresent: Boolean(formData.phoneNumber.trim()),
+            addressPresent: Boolean(formData.address.trim()),
+            idTypePresent: Boolean(formData.idType),
+            idNumberPresent: Boolean(formData.idNumber.trim()),
+            idDocumentPathPresent: Boolean(idDocumentFile[0]),
+            selfiePathPresent: Boolean(selfieFile[0]),
+            idDocumentObjectPresent: Boolean(idDocumentFileObjects[0]),
+            selfieObjectPresent: Boolean(selfieFileObjects[0]),
+          },
+        });
+        const updatedData = await submitKyc(user.id, {
+          ...formData,
+          idType: formData.idType as 'NIN' | 'PASSPORT' | 'DRIVERS_LICENSE' | 'VOTERS_CARD',
+          selfieFile: selfieFile[0],
+          idDocumentFile: idDocumentFile[0],
+          submittedAt: new Date().toISOString(),
+        }, {
+          selfieFile: selfieFileObjects[0],
+          idDocumentFile: idDocumentFileObjects[0],
+        });
+
+        console.log('[FarmerKYC] Verification submitted successfully', {
+          userId: user.id,
+          status: updatedData.status,
+          recordId: updatedData.recordId,
+        });
+        setKycData(updatedData);
+        toast({
+          title: 'KYC submitted for review',
+          description: 'Your documents are being verified. This usually takes 24-48 hours.',
+        });
+
+        setTimeout(() => {
+          navigate('/farmer/dashboard');
+        }, 1500);
+      } catch (error) {
+        console.error('Error submitting KYC:', error);
+        toast({
+          title: 'Submission failed',
+          description: getKycSubmissionMessage(error),
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
   };
 
   const handleResubmit = () => {
     if (!user) return;
     
-    // Reset to start fresh
-    updateKYCData(user.id, {
-      status: 'NOT_STARTED',
-    });
-    
-    setSelfieFile([]);
-    setIdDocumentFile([]);
-    setStep(0);
-    
-    const updatedData = getKYCByUserId(user.id);
-    setKycData(updatedData);
+    void (async () => {
+      try {
+        setIsSubmitting(true);
+        const updatedData = await resetKycRecord(user.id, 'farmer');
+        setSelfieFile([]);
+        setIdDocumentFile([]);
+        setSelfieFileObjects([]);
+        setIdDocumentFileObjects([]);
+        setStep(0);
+        setKycData(updatedData);
+      } catch (error) {
+        console.error('Error resetting KYC:', error);
+        toast({ title: 'Could not reset KYC', variant: 'destructive' });
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
   };
 
   const isApproved = kycData?.status === 'APPROVED';
   const isRejected = kycData?.status === 'REJECTED';
-  const isInReview = kycData?.status === 'IN_REVIEW';
+  const isInReview = kycData?.status === 'PENDING' || kycData?.status === 'IN_REVIEW';
   const isNotStarted = !kycData || kycData.status === 'NOT_STARTED';
 
   return (
@@ -329,9 +453,10 @@ const FarmerKYC = () => {
                 <div className="pt-2">
                   <button
                     onClick={handleNext}
+                    disabled={isSubmitting}
                     className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                   >
-                    Continue to Identity Verification
+                    {isSubmitting ? 'Saving...' : 'Continue to Identity Verification'}
                     <ArrowRight className="w-5 h-5" />
                   </button>
                 </div>
@@ -388,6 +513,8 @@ const FarmerKYC = () => {
                       <FileUploader
                         files={idDocumentFile}
                         onFilesChange={setIdDocumentFile}
+                        fileObjects={idDocumentFileObjects}
+                        onFileObjectsChange={setIdDocumentFileObjects}
                         maxFiles={1}
                         accept="image/*,.pdf"
                         maxSizeMB={5}
@@ -401,6 +528,8 @@ const FarmerKYC = () => {
                       <FileUploader
                         files={selfieFile}
                         onFilesChange={setSelfieFile}
+                        fileObjects={selfieFileObjects}
+                        onFileObjectsChange={setSelfieFileObjects}
                         maxFiles={1}
                         accept="image/*"
                         maxSizeMB={5}
@@ -490,10 +619,11 @@ const FarmerKYC = () => {
                   </button>
                   <button
                     onClick={handleSubmit}
+                    disabled={isSubmitting}
                     className="flex-1 py-4 bg-primary text-primary-foreground rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
                   >
                     <CheckCircle className="w-5 h-5" />
-                    Submit for Review
+                    {isSubmitting ? 'Submitting...' : 'Submit for Review'}
                   </button>
                 </div>
               </div>
