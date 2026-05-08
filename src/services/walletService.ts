@@ -295,7 +295,7 @@ export const createPayoutRequest = async (
   }
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase.from('payout_requests').insert({
+  const requestPayload = {
     user_id: userId,
     wallet_id: walletRow.id,
     amount,
@@ -303,13 +303,24 @@ export const createPayoutRequest = async (
     account_number: 'pending_collection',
     account_name: accountName,
     status: 'Submitted',
-  });
+  };
+
+  console.log('[walletService] Creating payout request', requestPayload);
+
+  const { data: createdRequest, error } = await supabase
+    .from('payout_requests')
+    .insert(requestPayload)
+    .select('id, user_id, amount, bank_name, status, created_at')
+    .single();
 
   if (error) {
     throw error;
   }
 
+  console.log('[walletService] Payout request created', createdRequest);
+
   try {
+    const payoutRequestId = (createdRequest as { id?: string } | null)?.id || null;
     await Promise.allSettled([
       createNotification({
         recipientUserId: userId,
@@ -318,14 +329,29 @@ export const createPayoutRequest = async (
         message: `${amount.toLocaleString()} NGN withdrawal request is now in review.`,
         entityType: 'wallet',
         entityId: userId,
+        relatedWithdrawalId: payoutRequestId,
+        linkUrl: payoutRequestId ? `/farmer/wallet?withdrawal=${payoutRequestId}` : '/farmer/wallet',
+        metadata: {
+          payoutRequestId,
+          amount,
+          bankName,
+        },
       }),
       createNotification({
         recipientRole: 'admin',
-        type: 'withdrawal_requested',
+        type: 'withdrawal_request',
         title: 'New withdrawal request',
         message: `A farmer submitted a withdrawal request of ${amount.toLocaleString()} NGN via ${bankName}.`,
         entityType: 'wallet',
         entityId: userId,
+        relatedWithdrawalId: payoutRequestId,
+        linkUrl: payoutRequestId ? `/admin/payments?withdrawal=${payoutRequestId}` : '/admin/payments',
+        metadata: {
+          payoutRequestId,
+          amount,
+          bankName,
+          farmerId: userId,
+        },
       }),
     ]);
   } catch (notificationError) {

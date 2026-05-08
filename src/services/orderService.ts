@@ -606,6 +606,33 @@ const createSupabaseOrderRecord = async (
         throw historyError;
     }
 
+    const { error: orderEventError } = await supabase.from("order_events").insert({
+        order_id: orderId,
+        actor_id: input.buyerId,
+        event_type: "order_created",
+        title: "Order created",
+        description:
+            "Buyer created order request and payment initialization started.",
+        metadata: {
+            listingId: input.listingId,
+            quantityKg: input.quantityKg,
+            pricePerKg: input.pricePerKg,
+            totalAmount: amount,
+            paymentMethod: input.paymentMethod || "paystack",
+        },
+    });
+
+    if (orderEventError) {
+        console.warn("[orderService] Order event insert skipped", {
+            orderId,
+            orderEventError,
+            code: (orderEventError as any)?.code,
+            details: (orderEventError as any)?.details,
+            hint: (orderEventError as any)?.hint,
+            message: (orderEventError as any)?.message,
+        });
+    }
+
     console.log("[orderService] Direct Supabase order request created", {
         orderId,
         listingId: input.listingId,

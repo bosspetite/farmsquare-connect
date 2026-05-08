@@ -71,11 +71,39 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         let active = true;
         let intervalHandle: number | undefined;
         let unsubscribeRealtime: (() => void) | undefined;
+        const extractErrorInfo = (error: unknown) => {
+            if (!error || typeof error !== "object") {
+                return {
+                    message: String(error || ""),
+                    code: undefined as string | undefined,
+                    details: undefined as string | undefined,
+                    hint: undefined as string | undefined,
+                };
+            }
+
+            const e = error as Record<string, unknown>;
+            return {
+                message:
+                    typeof e.message === "string"
+                        ? e.message
+                        : "Failed to load notifications.",
+                code: typeof e.code === "string" ? e.code : undefined,
+                details:
+                    typeof e.details === "string" ? e.details : undefined,
+                hint: typeof e.hint === "string" ? e.hint : undefined,
+            };
+        };
 
         const loadNotifications = async () => {
             try {
                 setNotificationLoading(true);
                 setNotificationError(null);
+                console.log("[AdminLayout] Current auth user:", user);
+                console.log("[AdminLayout] Current profile:", user);
+                console.log(
+                    "[AdminLayout] Fetching notifications for:",
+                    user?.id || null,
+                );
                 const liveNotifications = await getNotificationsForUser(
                     user?.id,
                     user?.role,
@@ -83,19 +111,26 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                 if (!active) {
                     return;
                 }
+                console.log(
+                    "[AdminLayout] Notification query result:",
+                    liveNotifications,
+                );
                 setNotifications(liveNotifications);
             } catch (error) {
+                const errInfo = extractErrorInfo(error);
                 console.error(
-                    "[AdminLayout] Failed to load notifications",
-                    error,
+                    "[AdminLayout] Notification query error:",
+                    {
+                        error,
+                        message: errInfo.message,
+                        code: errInfo.code,
+                        details: errInfo.details,
+                        hint: errInfo.hint,
+                    },
                 );
                 if (active) {
                     setNotifications([]);
-                    setNotificationError(
-                        error instanceof Error
-                            ? error.message
-                            : "Failed to load notifications.",
-                    );
+                    setNotificationError(errInfo.message);
                 }
             } finally {
                 if (active) {
@@ -202,13 +237,38 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             }
 
             const notificationType = notification.type.toLowerCase();
+            const targetOrderId =
+                notification.relatedOrderId || notification.entityId;
+
+            if (notification.linkUrl) {
+                navigate(notification.linkUrl);
+                return;
+            }
+
             if (
                 notification.entityType === "order" ||
                 notificationType === "new_order" ||
                 notificationType === "order_status_updated" ||
-                notificationType === "payment_successful"
+                notificationType === "payment_successful" ||
+                notificationType === "order_accepted" ||
+                notificationType === "order_rejected" ||
+                notificationType === "order_completed" ||
+                notificationType === "escrow_held" ||
+                notificationType === "escrow_released"
             ) {
+                if (targetOrderId) {
+                    navigate("/admin/orders");
+                    return;
+                }
                 navigate("/admin/orders");
+                return;
+            }
+
+            if (
+                notification.entityType === "listing" ||
+                notificationType.includes("listing")
+            ) {
+                navigate("/admin/listings");
                 return;
             }
 

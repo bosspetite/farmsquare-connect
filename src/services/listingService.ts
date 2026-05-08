@@ -1,6 +1,7 @@
 import { Listing, ListingStatus, ProductImageSource } from '@/types';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 import { LISTING_STATUS, MARKETPLACE_VISIBLE_LISTING_STATUS } from '@/constants/listingStatus';
+import { createNotification } from '@/services/notificationService';
 import {
   addListing as addLocalListing,
   deleteListing as deleteLocalListing,
@@ -359,6 +360,51 @@ export const createListing = async (input: CreateListingInput): Promise<Listing>
       });
       throw photoError;
     }
+  }
+
+  try {
+    await Promise.allSettled([
+      createNotification({
+        actorId: input.farmerId,
+        recipientRole: 'admin',
+        type: input.status === LISTING_STATUS.ACTIVE ? 'listing_published' : 'listing_created',
+        title: input.status === LISTING_STATUS.ACTIVE ? 'Listing published' : 'New listing draft created',
+        message: `${ownerProfile.full_name || input.farmerName} created a ${input.status === LISTING_STATUS.ACTIVE ? 'live' : 'draft'} listing for ${input.commodity}.`,
+        entityType: 'listing',
+        entityId: data.id,
+        relatedProductId: data.id,
+        relatedListingId: data.id,
+        linkUrl: '/admin/listings',
+        metadata: {
+          status: input.status,
+          commodity: input.commodity,
+          quantityKg: input.quantityKg,
+          pricePerKg: input.pricePerKg,
+          ownerRole: ownerProfile.role,
+        },
+      }),
+      createNotification({
+        actorId: input.farmerId,
+        recipientUserId: input.farmerId,
+        type: input.status === LISTING_STATUS.ACTIVE ? 'listing_published' : 'listing_created',
+        title: input.status === LISTING_STATUS.ACTIVE ? 'Listing is now live' : 'Listing draft saved',
+        message: `${input.commodity} listing has been ${input.status === LISTING_STATUS.ACTIVE ? 'published to the marketplace' : 'saved as draft'}.`,
+        entityType: 'listing',
+        entityId: data.id,
+        relatedProductId: data.id,
+        relatedListingId: data.id,
+        linkUrl: ownerProfile.role === 'admin' ? '/admin/listings' : '/farmer/listings',
+        metadata: {
+          status: input.status,
+          commodity: input.commodity,
+        },
+      }),
+    ]);
+  } catch (notificationError) {
+    console.error('[listingService] Failed to create listing notifications', {
+      listingId: data.id,
+      notificationError,
+    });
   }
 
   return mapListing(

@@ -3,6 +3,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 import { approveKyc, getKycRecordByUserId, getPendingKycRecords, rejectKyc, updateKycReviewStatus } from '@/services/kycService';
 import { getAccessibleOrders } from '@/services/orderService';
 import { clearProfileCache, getProfileById } from '@/services/profileService';
+import { createNotification } from '@/services/notificationService';
 
 interface ProfileListRow {
   id: string;
@@ -66,9 +67,11 @@ interface EscrowRow {
 interface PayoutRequestRow {
   id: string;
   user_id: string;
+  wallet_id?: string;
   amount: number;
   bank_name: string;
   account_number: string;
+  account_name?: string;
   status: 'Submitted' | 'InReview' | 'Paid' | 'Rejected';
   created_at: string;
 }
@@ -96,6 +99,22 @@ interface DisputeEvidenceRow {
   notes: string | null;
 }
 
+interface OrderStatusHistoryRow {
+  id: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+}
+
+interface OrderEventRow {
+  id: string;
+  event_type: string;
+  title: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface AdminUserSummary extends User {
   email?: string;
   listingCount: number;
@@ -121,14 +140,30 @@ export interface AdminPayoutRequest {
   userName: string;
   amount: number;
   bankName: string;
+  accountName?: string;
+  accountNumber?: string;
   accountMasked: string;
   status: 'Submitted' | 'InReview' | 'Paid' | 'Rejected';
   createdAt: string;
 }
 
+export interface ProcessPayoutRequestInput {
+  payoutRequestId: string;
+  action: 'approve' | 'reject';
+  note?: string;
+}
+
 export interface PendingKycSubmission {
   user: AdminUserSummary;
   kyc: Awaited<ReturnType<typeof getKycRecordByUserId>>;
+}
+
+export interface AdminOrderActivityItem {
+  id: string;
+  type: string;
+  title: string;
+  description?: string;
+  createdAt: string;
 }
 
 const ensureSupabase = () => {
@@ -322,6 +357,50 @@ export const getAllOrders = async (): Promise<Order[]> => {
   return getAccessibleOrders();
 };
 
+export const getOrderActivityTimeline = async (
+  orderId: string
+): Promise<AdminOrderActivityItem[]> => {
+  const supabase = ensureSupabase();
+  const [{ data: statusRows, error: statusError }, { data: eventRows, error: eventError }] = await Promise.all([
+    supabase
+      .from('order_status_history')
+      .select('id, status, notes, created_at')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('order_events')
+      .select('id, event_type, title, description, metadata, created_at')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: true }),
+  ]);
+
+  if (statusError) {
+    throw statusError;
+  }
+
+  // order_events may not exist in older DBs; tolerate missing relation.
+  const orderEvents = eventError ? [] : ((eventRows || []) as OrderEventRow[]);
+  const statuses = ((statusRows || []) as OrderStatusHistoryRow[]).map((row) => ({
+    id: row.id,
+    type: `status_${row.status.toLowerCase()}`,
+    title: `Order ${row.status}`,
+    description: row.notes || undefined,
+    createdAt: row.created_at,
+  }));
+
+  const events = orderEvents.map((row) => ({
+    id: row.id,
+    type: row.event_type,
+    title: row.title,
+    description: row.description || undefined,
+    createdAt: row.created_at,
+  }));
+
+  return [...statuses, ...events].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+  );
+};
+
 export const getAllEscrows = async (): Promise<Escrow[]> => {
   const supabase = ensureSupabase();
   const { data, error } = await supabase
@@ -490,7 +569,7 @@ export const getAllPayoutRequests = async (): Promise<AdminPayoutRequest[]> => {
   const [{ data: payoutRows, error: payoutError }, users] = await Promise.all([
     supabase
       .from('payout_requests')
-      .select('id, user_id, amount, bank_name, account_number, status, created_at')
+      .select('id, user_id, wallet_id, amount, bank_name, account_number, account_name, status, created_at')
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
     getAllUsers(),
@@ -508,10 +587,171 @@ export const getAllPayoutRequests = async (): Promise<AdminPayoutRequest[]> => {
     userName: userNameById.get(request.user_id) || 'Farmer',
     amount: Number(request.amount || 0),
     bankName: request.bank_name,
+    accountName: request.account_name || undefined,
+    accountNumber: request.account_number || undefined,
     accountMasked: request.account_number === 'pending_collection' ? 'Account details pending' : request.account_number,
     status: request.status,
     createdAt: request.created_at,
   }));
+};
+
+export const processPayoutRequest = async ({
+  payoutRequestId,
+  action,
+  note,
+}: ProcessPayoutRequestInput): Promise<AdminPayoutRequest> => {
+  const supabase = ensureSupabase();
+  const nextStatus: AdminPayoutRequest['status'] = action === 'approve' ? 'Paid' : 'Rejected';
+
+  const { data: payoutRow, error: payoutError } = await supabase
+    .from('payout_requests')
+    .select('id, user_id, wallet_id, amount, bank_name, account_number, account_name, status, created_at')
+    .eq('id', payoutRequestId)
+    .is('deleted_at', null)
+    .single();
+
+  if (payoutError) {
+    throw payoutError;
+  }
+
+  const typedRow = payoutRow as PayoutRequestRow & { wallet_id: string };
+  if (typedRow.status === 'Paid' || typedRow.status === 'Rejected') {
+    throw new Error(`Withdrawal request already ${typedRow.status.toLowerCase()}.`);
+  }
+
+  const { data: walletRow, error: walletError } = await supabase
+    .from('wallets')
+    .select('id, user_id, available, pending, locked, withdrawn')
+    .eq('id', typedRow.wallet_id)
+    .single();
+
+  if (walletError) {
+    throw walletError;
+  }
+
+  const walletAvailable = Number(walletRow.available || 0);
+  const amount = Number(typedRow.amount || 0);
+
+  if (action === 'approve' && amount > walletAvailable) {
+    throw new Error('Insufficient available balance to approve this withdrawal.');
+  }
+
+  const updatedWalletPayload =
+    action === 'approve'
+      ? {
+          available: Math.max(walletAvailable - amount, 0),
+          withdrawn: Number(walletRow.withdrawn || 0) + amount,
+          updated_at: new Date().toISOString(),
+        }
+      : {
+          updated_at: new Date().toISOString(),
+        };
+
+  if (action === 'approve') {
+    const { error: walletUpdateError } = await supabase
+      .from('wallets')
+      .update(updatedWalletPayload)
+      .eq('id', typedRow.wallet_id);
+
+    if (walletUpdateError) {
+      throw walletUpdateError;
+    }
+  }
+
+  const { error: requestUpdateError } = await supabase
+    .from('payout_requests')
+    .update({
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', typedRow.id);
+
+  if (requestUpdateError) {
+    throw requestUpdateError;
+  }
+
+  if (action === 'approve') {
+    const { error: walletTransactionError } = await supabase
+      .from('wallet_transactions')
+      .insert({
+        wallet_id: typedRow.wallet_id,
+        type: 'withdrawal',
+        title: 'Withdrawal approved by admin',
+        amount,
+        status: 'completed',
+        reference: typedRow.id,
+        metadata: {
+          payoutRequestId: typedRow.id,
+          bankName: typedRow.bank_name,
+          accountMasked: typedRow.account_number,
+          note: note || null,
+        },
+      });
+
+    if (walletTransactionError) {
+      throw walletTransactionError;
+    }
+  }
+
+  try {
+    await Promise.allSettled([
+      createNotification({
+        recipientUserId: typedRow.user_id,
+        type: action === 'approve' ? 'withdrawal_approved' : 'withdrawal_rejected',
+        title: action === 'approve' ? 'Withdrawal approved' : 'Withdrawal rejected',
+        message:
+          action === 'approve'
+            ? `Your withdrawal request of ${amount.toLocaleString()} NGN was approved.`
+            : `Your withdrawal request of ${amount.toLocaleString()} NGN was rejected.${note ? ` Reason: ${note}` : ''}`,
+        entityType: 'wallet',
+        entityId: typedRow.user_id,
+        relatedWithdrawalId: typedRow.id,
+        linkUrl: `/farmer/wallet?withdrawal=${typedRow.id}`,
+        metadata: {
+          payoutRequestId: typedRow.id,
+          amount,
+          status: nextStatus,
+          note: note || null,
+        },
+      }),
+      createNotification({
+        recipientRole: 'admin',
+        type: action === 'approve' ? 'withdrawal_approved' : 'withdrawal_rejected',
+        title: action === 'approve' ? 'Withdrawal approved' : 'Withdrawal rejected',
+        message: `Withdrawal request ${typedRow.id.slice(0, 8)} was ${nextStatus.toLowerCase()} for ${amount.toLocaleString()} NGN.`,
+        entityType: 'wallet',
+        entityId: typedRow.user_id,
+        relatedWithdrawalId: typedRow.id,
+        linkUrl: `/admin/payments?withdrawal=${typedRow.id}`,
+        metadata: {
+          payoutRequestId: typedRow.id,
+          amount,
+          status: nextStatus,
+          note: note || null,
+        },
+      }),
+    ]);
+  } catch (notificationError) {
+    console.error('[adminService] Failed to create withdrawal decision notifications', notificationError);
+  }
+
+  const user = await getUserById(typedRow.user_id);
+
+  return {
+    id: typedRow.id,
+    userId: typedRow.user_id,
+    userName: user?.name || 'Farmer',
+    amount,
+    bankName: typedRow.bank_name,
+    accountName: typedRow.account_name || undefined,
+    accountNumber: typedRow.account_number || undefined,
+    accountMasked:
+      typedRow.account_number === 'pending_collection'
+        ? 'Account details pending'
+        : typedRow.account_number,
+    status: nextStatus,
+    createdAt: typedRow.created_at,
+  };
 };
 
 export const getKycReviewByUserId = async (userId: string) => {

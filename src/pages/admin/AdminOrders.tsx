@@ -5,7 +5,7 @@ import { formatDate, formatNaira, formatTimeAgo } from '@/lib/store';
 import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Modal } from '@/components/ui/Modal';
-import { getAllEscrows, getAllOrders } from '@/services/adminService';
+import { AdminOrderActivityItem, getAllEscrows, getAllOrders, getOrderActivityTimeline } from '@/services/adminService';
 import { Escrow, Order } from '@/types';
 
 const AdminOrders = () => {
@@ -16,6 +16,8 @@ const AdminOrders = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderActivity, setOrderActivity] = useState<AdminOrderActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -41,6 +43,38 @@ const AdminOrders = () => {
   useEffect(() => {
     void loadOrders();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadOrderActivity = async () => {
+      if (!selectedOrder) {
+        setOrderActivity([]);
+        return;
+      }
+
+      try {
+        setActivityLoading(true);
+        const timeline = await getOrderActivityTimeline(selectedOrder.id);
+        if (!active) return;
+        setOrderActivity(timeline);
+      } catch (error) {
+        console.error('[AdminOrders] Failed to load order activity timeline', error);
+        if (!active) return;
+        setOrderActivity([]);
+      } finally {
+        if (active) {
+          setActivityLoading(false);
+        }
+      }
+    };
+
+    void loadOrderActivity();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedOrder]);
 
   const filteredOrders = useMemo(
     () =>
@@ -248,6 +282,30 @@ const AdminOrders = () => {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="p-4 bg-muted/50 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <h4 className="font-semibold text-foreground text-sm">Activity Tracking</h4>
+                </div>
+                {activityLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading activity...</p>
+                ) : orderActivity.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No tracked activity yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {orderActivity.map((activity) => (
+                      <div key={activity.id} className="border-l-2 border-primary/30 pl-3">
+                        <p className="text-sm font-medium text-foreground">{activity.title}</p>
+                        {activity.description && (
+                          <p className="text-xs text-muted-foreground">{activity.description}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">{formatDate(activity.createdAt)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="p-4 bg-muted/50 rounded-xl">
