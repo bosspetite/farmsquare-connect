@@ -71,7 +71,7 @@ const statusLabels: Record<StatusType, string> = {
   Refunded: 'Refunded',
   Submitted: 'Submitted',
   InReview: 'In Review',
-  Paid: 'Paid',
+  Paid: 'Pending Farmer Acceptance',
   APPROVED: 'Approved',
   NOT_STARTED: 'Not Started',
 };

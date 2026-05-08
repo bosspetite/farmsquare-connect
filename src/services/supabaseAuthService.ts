@@ -90,15 +90,13 @@ const ensureProfileAndWallet = async (
     phone: metadata.phone || null,
   });
 
-  try {
-    await ensureWalletExists(profile.id);
-  } catch (error) {
+  void ensureWalletExists(profile.id).catch((error) => {
     console.warn('[SupabaseAuth] Wallet bootstrap failed; continuing login without blocking access', {
       userId: profile.id,
       role: profile.role,
       error,
     });
-  }
+  });
 
   return profile;
 };

@@ -44,6 +44,7 @@ export const NotificationBell = ({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <NotificationDropdown
+            onClose={() => setOpen(false)}
             notifications={notifications}
             unreadCount={unreadCount}
             loading={loading}

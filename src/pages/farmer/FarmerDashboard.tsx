@@ -31,6 +31,9 @@ const FarmerDashboard = () => {
     }
 
     const syncOrders = async () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
       try {
         const orders = await getFarmerOrders(user.id);
         setAllOrders(orders);
@@ -47,10 +50,10 @@ const FarmerDashboard = () => {
     };
     window.addEventListener('focus', handleFocus);
 
-    // Refresh every 10 seconds for real-time updates
+    // Refresh every 30 seconds for real-time updates
     const interval = setInterval(() => {
       void syncOrders();
-    }, 10000);
+    }, 30000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -199,6 +202,7 @@ const FarmerDashboard = () => {
         <WalletCard
           available={wallet?.available || 0}
           pending={wallet?.pending || 0}
+          onOpenWallet={() => navigate('/farmer/wallet')}
           onWithdraw={() => navigate('/farmer/wallet')}
         />
 

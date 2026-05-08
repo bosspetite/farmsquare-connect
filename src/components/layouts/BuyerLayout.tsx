@@ -16,7 +16,7 @@ import { SignOutModal } from '@/components/ui/SignOutModal';
 import logo from '@/assets/logo-web.png';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { AppNotification } from '@/types';
-import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead } from '@/services/notificationService';
+import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead, subscribeToNotifications } from '@/services/notificationService';
 
 interface BuyerLayoutProps {
   children: React.ReactNode;
@@ -43,6 +43,8 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
 
   useEffect(() => {
     let active = true;
+    let intervalHandle: number | undefined;
+    let unsubscribeRealtime: (() => void) | undefined;
 
     const loadNotifications = async () => {
       try {
@@ -68,6 +70,34 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
 
     if (user?.role === 'buyer') {
       void loadNotifications();
+      unsubscribeRealtime = subscribeToNotifications(
+        { userId: user.id, role: user.role },
+        {
+          onNotification: (notification) => {
+            if (!active) {
+              return;
+            }
+            setNotifications((current) => {
+              const exists = current.some((item) => item.id === notification.id);
+              if (exists) {
+                return current.map((item) => (item.id === notification.id ? notification : item));
+              }
+              return [notification, ...current].sort(
+                (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+              );
+            });
+          },
+          onError: (error) => {
+            if (!active) {
+              return;
+            }
+            console.error('[BuyerLayout] Notification realtime stream error', error);
+          },
+        }
+      );
+      intervalHandle = window.setInterval(() => {
+        void loadNotifications();
+      }, 60000);
     } else {
       setNotifications([]);
       setNotificationLoading(false);
@@ -76,6 +106,10 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
 
     return () => {
       active = false;
+      if (intervalHandle) {
+        window.clearInterval(intervalHandle);
+      }
+      unsubscribeRealtime?.();
     };
   }, [location.pathname, user?.id, user?.role]);
 
@@ -95,13 +129,23 @@ export const BuyerLayout: React.FC<BuyerLayoutProps> = ({ children }) => {
         return;
       }
 
-      if (notification.entityType === 'order' || notification.type.includes('ORDER')) {
+      const notificationType = notification.type.toLowerCase();
+      if (
+        notification.entityType === 'order' ||
+        notificationType === 'new_order' ||
+        notificationType === 'order_status_updated' ||
+        notificationType === 'payment_successful'
+      ) {
+        if (notification.entityId) {
+          navigate(`/buyer/orders/${notification.entityId}`);
+          return;
+        }
         navigate('/buyer/orders');
         return;
       }
 
-      if (notification.type.includes('PAY') || notification.entityType === 'wallet') {
-        navigate('/buyer/orders');
+      if (notification.entityType === 'wallet' || notificationType.includes('pay')) {
+        navigate('/buyer/wallet');
       }
     } catch (error) {
       console.error('[BuyerLayout] Failed to open notification', error);

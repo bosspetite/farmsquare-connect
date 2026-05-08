@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CreditCard, Lock, CheckCircle, X, Loader2, Shield, Smartphone, Monitor, AlertCircle } from 'lucide-react';
 import { formatNaira } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
@@ -26,9 +26,11 @@ const PaymentGateway = ({ amount, orderDetails, onPrepareOrder, onSuccess, onDis
   const [failureReason, setFailureReason] = useState('Payment could not be started. Please try again.');
   const [isPreparingOrder, setIsPreparingOrder] = useState(false);
   const [isFinalizingOrder, setIsFinalizingOrder] = useState(false);
+  const hasSettledPaymentRef = useRef(false);
   const isBusy = isPreparingOrder || isFinalizingOrder || isProcessing;
 
   const handlePayment = async () => {
+    hasSettledPaymentRef.current = false;
     if (!email || !email.includes('@')) {
       toast({
         title: 'Invalid email',
@@ -98,15 +100,19 @@ const PaymentGateway = ({ amount, orderDetails, onPrepareOrder, onSuccess, onDis
         paymentReference,
       });
     } catch (error: any) {
+      const userMessage =
+        typeof error?.message === 'string' && error.message.trim().length > 0
+          ? error.message
+          : 'Please try again.';
       console.error('[PaymentGateway] Failed to create pending order', {
         paymentReference,
         error,
       });
-      setFailureReason('Order could not be created. Please try again.');
+      setFailureReason(`Order could not be created. ${userMessage}`);
       setStep('failed');
       toast({
         title: 'Order could not be created.',
-        description: 'Please try again.',
+        description: userMessage,
         variant: 'destructive',
       });
       setIsPreparingOrder(false);
@@ -139,6 +145,13 @@ const PaymentGateway = ({ amount, orderDetails, onPrepareOrder, onSuccess, onDis
         ],
       },
       onClose: async () => {
+        if (hasSettledPaymentRef.current) {
+          console.log('[PaymentGateway] Ignoring close callback because payment flow already settled', {
+            orderId: pendingOrderId,
+            paymentReference,
+          });
+          return;
+        }
         console.log('[PaymentGateway] Payment window closed', {
           orderId: pendingOrderId,
           paymentReference,
@@ -161,6 +174,7 @@ const PaymentGateway = ({ amount, orderDetails, onPrepareOrder, onSuccess, onDis
         });
       },
       onSuccess: async (reference) => {
+        hasSettledPaymentRef.current = true;
         console.log('[PaymentGateway] Payment succeeded', {
           orderId: pendingOrderId,
           reference,
@@ -189,6 +203,7 @@ const PaymentGateway = ({ amount, orderDetails, onPrepareOrder, onSuccess, onDis
         }
       },
       onError: async (message) => {
+        hasSettledPaymentRef.current = true;
         console.error('[PaymentGateway] Payment initialization failed', {
           orderId: pendingOrderId,
           paymentReference,

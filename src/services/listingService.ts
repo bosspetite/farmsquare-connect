@@ -1,5 +1,6 @@
 import { Listing, ListingStatus, ProductImageSource } from '@/types';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
+import { LISTING_STATUS, MARKETPLACE_VISIBLE_LISTING_STATUS } from '@/constants/listingStatus';
 import {
   addListing as addLocalListing,
   deleteListing as deleteLocalListing,
@@ -57,6 +58,19 @@ interface ListingPhotoGroup {
   libraryImageId?: string;
 }
 
+const sanitizePhotoUrls = (values?: Array<string | null> | null): string[] =>
+  (values || [])
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length > 0);
+
+interface ListingOwnerProfile {
+  id: string;
+  role: string;
+  full_name: string | null;
+  email: string | null;
+  kyc_status?: string | null;
+}
+
 export interface CreateListingInput {
   farmerId: string;
   farmerName: string;
@@ -84,7 +98,7 @@ const mapMarketplaceListing = (row: MarketplaceListingRow): Listing => ({
   quantityKg: Number(row.quantity_kg || 0),
   pricePerKg: Number(row.price_per_kg || 0),
   minOrderKg: row.min_order_kg ? Number(row.min_order_kg) : undefined,
-  photos: row.photo_urls || [],
+  photos: sanitizePhotoUrls(row.photo_urls),
   locationLabel: row.location_label,
   region: row.region,
   status: row.status,
@@ -105,7 +119,7 @@ const mapListing = (
   quantityKg: Number(row.quantity_kg || 0),
   pricePerKg: Number(row.price_per_kg || 0),
   minOrderKg: row.min_order_kg ? Number(row.min_order_kg) : undefined,
-  photos: photos?.urls || [],
+  photos: sanitizePhotoUrls(photos?.urls),
   photoPaths: photos?.paths || [],
   photoSource: photos?.source,
   libraryImageId: photos?.libraryImageId,
@@ -135,7 +149,9 @@ const getListingPhotos = async (listingIds: string[]) => {
   const groupedPhotos = new Map<string, ListingPhotoGroup>();
   for (const photo of (data || []) as ListingPhotoRow[]) {
     const existing = groupedPhotos.get(photo.listing_id) || { urls: [], paths: [] };
-    existing.urls.push(photo.photo_url);
+    if (typeof photo.photo_url === 'string' && photo.photo_url.trim().length > 0) {
+      existing.urls.push(photo.photo_url.trim());
+    }
     if (photo.storage_path) {
       existing.paths.push(photo.storage_path);
     }
@@ -151,11 +167,48 @@ const getListingPhotos = async (listingIds: string[]) => {
   return groupedPhotos;
 };
 
+const assertListingOwnerIsValidSeller = async (
+  farmerId: string,
+  listingStatus: ListingStatus
+): Promise<ListingOwnerProfile> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, role, full_name, email, kyc_status')
+    .eq('id', farmerId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const profile = (data || null) as ListingOwnerProfile | null;
+
+  if (!profile || !['farmer', 'admin'].includes(profile.role)) {
+    console.error('[listingService] Invalid listing owner profile', {
+      farmerId,
+      role: profile?.role || null,
+      email: profile?.email || null,
+    });
+    throw new Error('Only farmer or admin profiles can own sellable listings.');
+  }
+
+  if (
+    profile.role === 'farmer' &&
+    listingStatus === LISTING_STATUS.ACTIVE &&
+    profile.kyc_status !== 'APPROVED'
+  ) {
+    throw new Error('Only approved farmers can publish active listings.');
+  }
+
+  return profile;
+};
+
 export const getMarketplaceListings = async (): Promise<Listing[]> => {
   if (!isSupabaseConfigured) {
     const state = refreshListings();
     return state.listings
-      .filter((listing) => listing.status === 'Active' && listing.quantityKg > 0)
+      .filter((listing) => listing.status === MARKETPLACE_VISIBLE_LISTING_STATUS && listing.quantityKg > 0)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
@@ -182,7 +235,11 @@ export const getMarketplaceListingById = async (listingId: string): Promise<List
   }
 
   const row = ((data || []) as MarketplaceListingRow[])[0];
-  return row ? mapMarketplaceListing(row) : null;
+  if (!row) {
+    return null;
+  }
+
+  return mapMarketplaceListing(row);
 };
 
 export const getFarmerListings = async (
@@ -237,40 +294,69 @@ export const createListing = async (input: CreateListingInput): Promise<Listing>
   }
 
   const supabase = getSupabaseClient();
+  const ownerProfile = await assertListingOwnerIsValidSeller(input.farmerId, input.status);
+  const listingInsertPayload = {
+    farmer_id: input.farmerId,
+    commodity: input.commodity,
+    grade: input.grade,
+    quantity_kg: input.quantityKg,
+    price_per_kg: input.pricePerKg,
+    min_order_kg: input.minOrderKg || null,
+    location_label: input.locationLabel,
+    region: input.region,
+    status: input.status,
+    description: input.description || null,
+  };
+
+  console.log('[listingService] Listing insert payload', listingInsertPayload);
+
   const { data, error } = await supabase
     .from('listings')
-    .insert({
-      farmer_id: input.farmerId,
-      commodity: input.commodity,
-      grade: input.grade,
-      quantity_kg: input.quantityKg,
-      price_per_kg: input.pricePerKg,
-      min_order_kg: input.minOrderKg || null,
-      location_label: input.locationLabel,
-      region: input.region,
-      status: input.status,
-      description: input.description || null,
-    })
+    .insert(listingInsertPayload)
     .select('id, farmer_id, commodity, grade, quantity_kg, price_per_kg, min_order_kg, location_label, region, status, description, created_at')
     .single();
 
   if (error) {
+    console.error('[listingService] Listing insert failed', {
+      listingInsertPayload,
+      error,
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      message: (error as any)?.message,
+    });
     throw error;
   }
 
   if (input.photos.length > 0) {
-    const { error: photoError } = await supabase.from('listing_photos').insert(
-      input.photos.map((photoUrl, index) => ({
+    const listingPhotosPayload = input.photos.map((photoUrl, index) => ({
         listing_id: data.id,
         photo_url: photoUrl,
         display_order: index,
         storage_path: input.photoPaths?.[index] || null,
         source: input.photoSource || 'upload',
         library_image_id: input.photoSource === 'library' ? input.libraryImageId || null : null,
-      }))
-    );
+      }));
+
+    console.log('[listingService] Listing photo insert payload', {
+      listingId: data.id,
+      photoCount: listingPhotosPayload.length,
+      source: input.photoSource || 'upload',
+    });
+
+    const { error: photoError } = await supabase
+      .from('listing_photos')
+      .insert(listingPhotosPayload);
 
     if (photoError) {
+      console.error('[listingService] Listing photo insert failed', {
+        listingId: data.id,
+        photoError,
+        code: (photoError as any)?.code,
+        details: (photoError as any)?.details,
+        hint: (photoError as any)?.hint,
+        message: (photoError as any)?.message,
+      });
       throw photoError;
     }
   }
@@ -283,7 +369,7 @@ export const createListing = async (input: CreateListingInput): Promise<Listing>
       source: input.photoSource,
       libraryImageId: input.libraryImageId || undefined,
     },
-    input.farmerName
+    ownerProfile.full_name || input.farmerName
   );
 };
 

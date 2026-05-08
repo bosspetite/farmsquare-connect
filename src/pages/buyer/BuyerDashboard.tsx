@@ -13,6 +13,7 @@ import { getWalletByUserId as getWalletByUserIdFromService } from '@/services/wa
 import { Listing, Order, ProductImageLibraryItem } from '@/types';
 import { getActiveProductLibraryImages } from '@/services/productImageLibraryService';
 import { getBuyerOrders } from '@/services/orderService';
+import { MARKETPLACE_VISIBLE_LISTING_STATUS } from '@/constants/listingStatus';
 
 const BuyerDashboard = () => {
   const navigate = useNavigate();
@@ -72,7 +73,9 @@ const BuyerDashboard = () => {
 
           setKycData(data);
           setBuyerWallet(wallet);
-          setMarketplaceListings(liveListings.filter((listing) => listing.status === 'Active'));
+          setMarketplaceListings(
+            liveListings.filter((listing) => listing.status === MARKETPLACE_VISIBLE_LISTING_STATUS)
+          );
           setLibraryImages(activeLibraryImages);
         } catch (error) {
           console.error('[BuyerDashboard] Failed to load buyer dashboard data', error);
@@ -259,10 +262,19 @@ const BuyerDashboard = () => {
                 l.commodity.toLowerCase() === produce.name.toLowerCase()
               );
               const libraryImage = libraryImages.find(
-                (image) => image.name.trim().toLowerCase() === produce.name.toLowerCase()
+                (image) => {
+                  const candidate = image.name.trim().toLowerCase();
+                  const target = produce.name.toLowerCase();
+                  return (
+                    candidate === target
+                    || candidate.includes(target.slice(0, -1))
+                    || target.includes(candidate)
+                  );
+                }
               );
-              const featuredImage = libraryImage?.imageUrl
-                || (listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(produce.name));
+              const featuredImage = (libraryImage?.imageUrl && libraryImage.imageUrl.trim().length > 0)
+                ? libraryImage.imageUrl
+                : (listing && listing.photos && listing.photos.length > 0 ? listing.photos[0] : getProduceImage(produce.name));
               
               return (
                 <div

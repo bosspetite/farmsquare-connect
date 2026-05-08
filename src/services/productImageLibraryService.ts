@@ -33,18 +33,26 @@ const ensureSupabase = () => {
   return getSupabaseClient();
 };
 
-const mapLibraryImage = (row: ProductImageLibraryRow): ProductImageLibraryItem => ({
-  id: row.id,
-  name: row.name,
-  category: row.category || undefined,
-  imageUrl: row.image_url,
-  imagePath: row.image_path || undefined,
-  storageBucket: row.storage_bucket || PRODUCT_IMAGE_BUCKET,
-  createdBy: row.created_by || undefined,
-  isActive: row.is_active,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+const mapLibraryImage = (row: ProductImageLibraryRow): ProductImageLibraryItem => {
+  const imageUrlFromRow = typeof row.image_url === 'string' ? row.image_url.trim() : '';
+  const imagePathFromRow = row.image_path ? row.image_path.trim() : '';
+  const resolvedImageUrl = imageUrlFromRow
+    || (imagePathFromRow ? getPublicUrl(imagePathFromRow) : '')
+    || getProduceImage(row.name || 'produce');
+
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category || undefined,
+    imageUrl: resolvedImageUrl,
+    imagePath: imagePathFromRow || undefined,
+    storageBucket: row.storage_bucket || PRODUCT_IMAGE_BUCKET,
+    createdBy: row.created_by || undefined,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 const sanitizeFileName = (value: string) =>
   value

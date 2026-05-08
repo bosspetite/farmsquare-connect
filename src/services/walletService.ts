@@ -9,6 +9,7 @@ import {
   getWithdrawalsByUserId as getLocalWithdrawalsByUserId,
   setAppState,
 } from '@/lib/store';
+import { createNotification } from '@/services/notificationService';
 
 interface WalletRow {
   id: string;
@@ -234,6 +235,19 @@ export const fundWallet = async (userId: string, amount: number, reference: stri
   if (transactionError) {
     throw transactionError;
   }
+
+  try {
+    await createNotification({
+      recipientUserId: userId,
+      type: 'wallet_funded',
+      title: 'Wallet funded successfully',
+      message: `${amount.toLocaleString()} NGN has been added to your wallet.`,
+      entityType: 'wallet',
+      entityId: userId,
+    });
+  } catch (notificationError) {
+    console.error('[walletService] Failed to create wallet funding notification', notificationError);
+  }
 };
 
 export const getPayoutRequests = async (userId: string): Promise<Withdrawal[]> => {
@@ -293,5 +307,28 @@ export const createPayoutRequest = async (
 
   if (error) {
     throw error;
+  }
+
+  try {
+    await Promise.allSettled([
+      createNotification({
+        recipientUserId: userId,
+        type: 'withdrawal_requested',
+        title: 'Withdrawal request submitted',
+        message: `${amount.toLocaleString()} NGN withdrawal request is now in review.`,
+        entityType: 'wallet',
+        entityId: userId,
+      }),
+      createNotification({
+        recipientRole: 'admin',
+        type: 'withdrawal_requested',
+        title: 'New withdrawal request',
+        message: `A farmer submitted a withdrawal request of ${amount.toLocaleString()} NGN via ${bankName}.`,
+        entityType: 'wallet',
+        entityId: userId,
+      }),
+    ]);
+  } catch (notificationError) {
+    console.error('[walletService] Failed to create withdrawal notifications', notificationError);
   }
 };

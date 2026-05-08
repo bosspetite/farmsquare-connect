@@ -16,6 +16,7 @@ const AdminDashboard = () => {
   const [openDisputes, setOpenDisputes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   const loadDashboard = async () => {
     try {
@@ -32,6 +33,7 @@ const AdminDashboard = () => {
       setRecentListings(listings.slice(0, 5));
       setRecentOrders(orders.slice(0, 5));
       setOpenDisputes((disputes || []).filter((dispute) => dispute.status === 'Open' || dispute.status === 'UnderReview'));
+      setLastUpdatedAt(new Date().toISOString());
       console.log('[AdminDashboard] Loaded dashboard snapshot', {
         totalUsers: nextStats.totalUsers,
         activeListings: nextStats.activeListings,
@@ -49,11 +51,39 @@ const AdminDashboard = () => {
     void loadDashboard();
   }, []);
 
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadDashboard();
+      }
+    };
+
+    const intervalHandle = window.setInterval(() => {
+      void refreshIfVisible();
+    }, 30000);
+
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+
+    return () => {
+      window.clearInterval(intervalHandle);
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, []);
+
   return (
     <AdminLayout>
       <div className="space-y-6 animate-fade-up">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-display font-bold text-foreground">Admin Overview</h1>
+          <div>
+            <h1 className="text-xl font-display font-bold text-foreground">Admin Overview</h1>
+            <p className="text-xs text-muted-foreground mt-1">
+              {lastUpdatedAt
+                ? `Live tracking · Last sync ${new Date(lastUpdatedAt).toLocaleTimeString()}`
+                : 'Live tracking enabled'}
+            </p>
+          </div>
           <button
             onClick={() => void loadDashboard()}
             className="px-4 py-2 bg-card border border-border rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors flex items-center gap-2"
