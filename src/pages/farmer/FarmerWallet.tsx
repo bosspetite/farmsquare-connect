@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -8,6 +8,7 @@ import {
   Copy,
   DollarSign,
   Receipt,
+  RefreshCw,
   Wallet,
 } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
@@ -17,7 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatNaira } from '@/lib/store';
 import { toast } from '@/hooks/use-toast';
 import { Transaction, Wallet as WalletType, Withdrawal } from '@/types';
-import { getFarmerOrders } from '@/services/orderService';
+import { getFarmerEscrows, getFarmerOrders } from '@/services/orderService';
 import { createPayoutRequest, getPayoutRequests, getWalletByUserId, getWalletTransactions } from '@/services/walletService';
 
 const banks = [
@@ -49,6 +50,8 @@ const FarmerWallet = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [pendingEarnings, setPendingEarnings] = useState(0);
+  const [escrowHeld, setEscrowHeld] = useState(0);
+  const [escrowReleased, setEscrowReleased] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -57,6 +60,7 @@ const FarmerWallet = () => {
   const [amount, setAmount] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [tab, setTab] = useState<'transactions' | 'withdrawals'>('transactions');
+  const [transactionView, setTransactionView] = useState<'all' | 'credit' | 'debit'>('all');
   const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
 
   const isKYCApproved = user?.kycStatus === 'APPROVED';
@@ -71,11 +75,12 @@ const FarmerWallet = () => {
       setIsLoading(true);
       setLoadError(null);
 
-      const [walletRow, transactionRows, payoutRows, farmerOrders] = await Promise.all([
+      const [walletRow, transactionRows, payoutRows, farmerOrders, farmerEscrows] = await Promise.all([
         getWalletByUserId(user.id),
         getWalletTransactions(user.id),
         getPayoutRequests(user.id),
         getFarmerOrders(user.id),
+        getFarmerEscrows(user.id),
       ]);
 
       setWallet(walletRow);
@@ -86,6 +91,16 @@ const FarmerWallet = () => {
           .filter((order) => ['Paid', 'Accepted', 'Processing', 'InTransit'].includes(order.status))
           .reduce((sum, order) => sum + order.amount, 0)
       );
+
+      const heldAmount = farmerEscrows
+        .filter((escrow) => escrow.status === 'held')
+        .reduce((sum, escrow) => sum + escrow.farmerAmount, 0);
+      const releasedAmount = farmerEscrows
+        .filter((escrow) => escrow.status === 'released')
+        .reduce((sum, escrow) => sum + escrow.farmerAmount, 0);
+
+      setEscrowHeld(heldAmount);
+      setEscrowReleased(releasedAmount);
     } catch (error: any) {
       setLoadError(error?.message || 'Unable to load your wallet right now.');
     } finally {
@@ -96,16 +111,6 @@ const FarmerWallet = () => {
   useEffect(() => {
     loadWalletData();
   }, [user?.id]);
-
-  const completedPayouts = useMemo(
-    () => withdrawals.filter((withdrawal) => withdrawal.status === 'Paid'),
-    [withdrawals]
-  );
-
-  const totalPayouts = useMemo(
-    () => completedPayouts.reduce((sum, withdrawal) => sum + withdrawal.amount, 0),
-    [completedPayouts]
-  );
 
   const handleWithdraw = async () => {
     if (!user || !amount || !selectedBank) {
@@ -155,6 +160,14 @@ const FarmerWallet = () => {
     }
   };
 
+  const filteredTransactions = transactions.filter((transaction) => {
+    if (transactionView === 'all') {
+      return true;
+    }
+    const isCredit = creditTransactionTypes.has(transaction.type);
+    return transactionView === 'credit' ? isCredit : !isCredit;
+  });
+
   if (isLoading) {
     return (
       <FarmerLayout>
@@ -194,7 +207,8 @@ const FarmerWallet = () => {
 
         <WalletCard
           available={wallet.available || 0}
-          pending={wallet.pending || 0}
+          pending={escrowHeld || wallet.pending || 0}
+          onOpenWallet={() => void loadWalletData()}
           onWithdraw={() => {
             if (!isKYCApproved) {
               toast({
@@ -217,10 +231,10 @@ const FarmerWallet = () => {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pending Earnings</p>
-                <p className="text-lg font-bold text-foreground">{formatNaira(pendingEarnings)}</p>
+                <p className="text-lg font-bold text-foreground">{formatNaira(escrowHeld)}</p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">From active orders</p>
+            <p className="text-xs text-muted-foreground">Held in escrow (not withdrawable yet)</p>
           </div>
           <div className="farm-card bg-farm-success/5 border-farm-success/20">
             <div className="flex items-center gap-3 mb-2">
@@ -229,12 +243,21 @@ const FarmerWallet = () => {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Completed Payouts</p>
-                <p className="text-lg font-bold text-foreground">{formatNaira(totalPayouts)}</p>
+                <p className="text-lg font-bold text-foreground">{formatNaira(escrowReleased)}</p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {completedPayouts.length} withdrawal{completedPayouts.length !== 1 ? 's' : ''}
-            </p>
+            <p className="text-xs text-muted-foreground">Released from escrow after buyer confirmation</p>
+          </div>
+        </div>
+
+        <div className="farm-card">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Pending Orders Value</span>
+            <span className="font-semibold text-foreground">{formatNaira(pendingEarnings)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm mt-2">
+            <span className="text-muted-foreground">Available to Withdraw</span>
+            <span className="font-semibold text-foreground">{formatNaira(wallet.available || 0)}</span>
           </div>
         </div>
 
@@ -281,7 +304,34 @@ const FarmerWallet = () => {
 
         {tab === 'transactions' && (
           <div className="space-y-2">
-            {transactions.length === 0 ? (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {[
+                { key: 'all' as const, label: 'All' },
+                { key: 'credit' as const, label: 'Credits' },
+                { key: 'debit' as const, label: 'Debits' },
+              ].map((filter) => (
+                <button
+                  key={filter.key}
+                  onClick={() => setTransactionView(filter.key)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    transactionView === filter.key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card border border-border text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+              <button
+                onClick={() => void loadWalletData()}
+                className="ml-auto px-3 py-2 rounded-lg text-xs font-medium bg-card border border-border text-muted-foreground hover:bg-muted flex items-center gap-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Refresh
+              </button>
+            </div>
+
+            {filteredTransactions.length === 0 ? (
               <div className="farm-card text-center py-12">
                 <DollarSign className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                 <p className="text-muted-foreground">No transactions yet</p>
@@ -290,10 +340,12 @@ const FarmerWallet = () => {
             ) : (
               <>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-medium text-foreground">All Transactions</p>
-                  <p className="text-xs text-muted-foreground">{transactions.length} total</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {transactionView === 'all' ? 'All Transactions' : transactionView === 'credit' ? 'Credit Transactions' : 'Debit Transactions'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{filteredTransactions.length} total</p>
                 </div>
-                {transactions.map((transaction) => {
+                {filteredTransactions.map((transaction) => {
                   const isCredit = creditTransactionTypes.has(transaction.type);
                   return (
                     <div

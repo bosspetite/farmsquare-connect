@@ -25,6 +25,15 @@ export interface EnsureProfileInput {
   phone?: string | null;
 }
 
+export interface FarmerAssignmentProfile {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  region: string;
+  kycStatus: User['kycStatus'];
+}
+
 const profileCache = new Map<string, ProfileRecord | null>();
 const inFlightProfileRequests = new Map<string, Promise<ProfileRecord | null>>();
 
@@ -184,4 +193,31 @@ export const ensureProfileExists = async (input: EnsureProfileInput): Promise<Pr
   profileCache.set(input.id, data);
   console.log('[ProfileService] Created profile', { userId: input.id, role: data.role });
   return data;
+};
+
+export const getFarmerProfilesForAssignment = async (): Promise<FarmerAssignmentProfile[]> => {
+  if (!isSupabaseConfigured) {
+    return [];
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, phone, state, kyc_status')
+    .eq('role', 'farmer')
+    .is('deleted_at', null)
+    .order('full_name', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map((profile: any) => ({
+    id: profile.id,
+    fullName: profile.full_name || 'Unnamed Farmer',
+    email: profile.email || '',
+    phone: profile.phone || '',
+    region: profile.state || 'Unknown',
+    kycStatus: profile.kyc_status || 'NOT_STARTED',
+  }));
 };

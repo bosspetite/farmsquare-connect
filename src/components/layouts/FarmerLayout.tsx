@@ -17,7 +17,7 @@ import { SignOutModal } from '@/components/ui/SignOutModal';
 import logo from '@/assets/logo-web.png';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { AppNotification } from '@/types';
-import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead } from '@/services/notificationService';
+import { getNotificationsForUser, markAllNotificationsRead, markNotificationRead, subscribeToNotifications } from '@/services/notificationService';
 
 interface FarmerLayoutProps {
   children: React.ReactNode;
@@ -45,6 +45,8 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
 
   useEffect(() => {
     let active = true;
+    let intervalHandle: number | undefined;
+    let unsubscribeRealtime: (() => void) | undefined;
 
     const loadNotifications = async () => {
       try {
@@ -70,6 +72,34 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
 
     if (user?.role === 'farmer') {
       void loadNotifications();
+      unsubscribeRealtime = subscribeToNotifications(
+        { userId: user.id, role: user.role },
+        {
+          onNotification: (notification) => {
+            if (!active) {
+              return;
+            }
+            setNotifications((current) => {
+              const exists = current.some((item) => item.id === notification.id);
+              if (exists) {
+                return current.map((item) => (item.id === notification.id ? notification : item));
+              }
+              return [notification, ...current].sort(
+                (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+              );
+            });
+          },
+          onError: (error) => {
+            if (!active) {
+              return;
+            }
+            console.error('[FarmerLayout] Notification realtime stream error', error);
+          },
+        }
+      );
+      intervalHandle = window.setInterval(() => {
+        void loadNotifications();
+      }, 60000);
     } else {
       setNotifications([]);
       setNotificationLoading(false);
@@ -78,6 +108,10 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
 
     return () => {
       active = false;
+      if (intervalHandle) {
+        window.clearInterval(intervalHandle);
+      }
+      unsubscribeRealtime?.();
     };
   }, [location.pathname, user?.id, user?.role]);
 
@@ -97,12 +131,22 @@ export const FarmerLayout: React.FC<FarmerLayoutProps> = ({ children }) => {
         return;
       }
 
-      if (notification.entityType === 'order' || notification.type.includes('ORDER')) {
+      const notificationType = notification.type.toLowerCase();
+      if (
+        notification.entityType === 'order' ||
+        notificationType === 'new_order' ||
+        notificationType === 'order_status_updated' ||
+        notificationType === 'payment_successful'
+      ) {
+        if (notification.entityId) {
+          navigate(`/farmer/orders/${notification.entityId}`);
+          return;
+        }
         navigate('/farmer/orders');
         return;
       }
 
-      if (notification.entityType === 'wallet' || notification.type.includes('PAY')) {
+      if (notification.entityType === 'wallet' || notificationType.includes('pay')) {
         navigate('/farmer/wallet');
       }
     } catch (error) {

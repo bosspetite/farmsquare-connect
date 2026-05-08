@@ -7,6 +7,7 @@ interface NotificationDropdownProps {
   unreadCount: number;
   loading: boolean;
   errorMessage?: string | null;
+  onClose: () => void;
   onNotificationClick: (notification: AppNotification) => void;
   onMarkRead: (notification: AppNotification) => void;
   onMarkAllRead: () => void;
@@ -17,28 +18,38 @@ export const NotificationDropdown = ({
   unreadCount,
   loading,
   errorMessage,
+  onClose,
   onNotificationClick,
   onMarkRead,
   onMarkAllRead,
 }: NotificationDropdownProps) => (
-  <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-96 bg-card border border-border rounded-xl shadow-2xl z-50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
+  <div className="fixed left-3 right-3 top-16 z-50 max-h-[calc(100vh-6rem)] overflow-hidden rounded-xl border border-border bg-card shadow-2xl flex flex-col sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-96">
     <div className="p-4 border-b border-border flex items-center justify-between gap-3">
       <div>
         <h3 className="font-semibold text-foreground">Notifications</h3>
         {unreadCount > 0 && <p className="text-xs text-muted-foreground">{unreadCount} unread</p>}
       </div>
-      {unreadCount > 0 && (
+      <div className="flex items-center gap-3">
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={onMarkAllRead}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Mark all as read
+          </button>
+        )}
         <button
           type="button"
-          onClick={onMarkAllRead}
-          className="text-xs font-medium text-primary hover:underline"
+          onClick={onClose}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
         >
-          Mark all as read
+          Close
         </button>
-      )}
+      </div>
     </div>
 
-    <div className="overflow-y-auto">
+    <div className="overflow-y-auto overscroll-contain">
       {loading ? (
         <div className="p-8 text-center">
           <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50 animate-pulse" />

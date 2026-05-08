@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Save, Shield } from 'lucide-react';
+import { ArrowLeft, Check, Package, Save, Search, Shield } from 'lucide-react';
 import { FarmerLayout } from '@/components/layouts/FarmerLayout';
 import { AdminLayout } from '@/components/layouts/AdminLayout';
 import { Stepper } from '@/components/ui/Stepper';
 import { FileUploader } from '@/components/ui/FileUploader';
 import { useAuth } from '@/hooks/useAuth';
 import { formatNaira } from '@/lib/store';
+import { FarmerAssignmentProfile } from '@/services/profileService';
 import { GradeType, ProductImageLibraryItem, ProductImageSource } from '@/types';
 import { toast } from '@/hooks/use-toast';
-import { Package } from 'lucide-react';
 import { createListing } from '@/services/listingService';
 import { ProductImageLibraryPicker } from '@/components/listings/ProductImageLibraryPicker';
 import { getActiveProductLibraryImages, uploadFarmerProductImage } from '@/services/productImageLibraryService';
+import { LISTING_STATUS } from '@/constants/listingStatus';
 
 const steps = [
   { label: 'Crop' },
@@ -45,6 +46,12 @@ const CreateListing = () => {
   const [grade, setGrade] = useState<GradeType>('A');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isKYCApproved = isAdminSeller || user?.kycStatus === 'APPROVED';
+  const farmerSearch = '';
+  const setFarmerSearch = () => {};
+  const isLoadingFarmers = false;
+  const filteredFarmers: FarmerAssignmentProfile[] = [];
+  const selectedFarmer: FarmerAssignmentProfile | null = null;
+  const setSelectedFarmer = (_farmer: FarmerAssignmentProfile) => {};
   const previewPhotos = useMemo(
     () => (imageSource === 'library' ? (selectedLibraryImage ? [selectedLibraryImage.imageUrl] : []) : uploadedPhotos),
     [imageSource, selectedLibraryImage, uploadedPhotos]
@@ -83,6 +90,19 @@ const CreateListing = () => {
     };
   }, [toast]);
 
+  const listingOwner = useMemo(() => {
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      email: user.email || '',
+      region: user.region,
+      kycStatus: user.kycStatus,
+    };
+  }, [user]);
+
   const handleNext = () => {
     if (step < 4) setStep(step + 1);
   };
@@ -97,6 +117,7 @@ const CreateListing = () => {
 
   const handlePublish = async () => {
     if (!user) return;
+    if (!listingOwner) return;
     
     // Check KYC approval
     if (!isKYCApproved) {
@@ -160,9 +181,25 @@ const CreateListing = () => {
         photoPaths = uploaded.map((item) => item.path);
       }
 
+      console.log('[CreateListing] Publish payload diagnostics', {
+        currentUser: user ? { id: user.id, role: user.role, kycStatus: user.kycStatus } : null,
+        isAdmin: isAdminSeller,
+        selectedFarmerOwner: null,
+          listingPayloadPreview: {
+            farmerId: listingOwner.id,
+            commodity,
+            grade,
+            quantityKg: parseFloat(quantity),
+            pricePerKg: parseFloat(price),
+            status: LISTING_STATUS.ACTIVE,
+            imageSource,
+            photoCount: validPhotos.length,
+          },
+      });
+
       await createListing({
-        farmerId: user.id,
-        farmerName: user.name,
+        farmerId: listingOwner.id,
+        farmerName: listingOwner.name,
         commodity,
         grade,
         quantityKg: parseFloat(quantity),
@@ -171,9 +208,9 @@ const CreateListing = () => {
         photoPaths,
         photoSource: imageSource,
         libraryImageId: imageSource === 'library' ? selectedLibraryImage?.id : null,
-        locationLabel: `${user.region} Farm`,
-        region: user.region,
-        status: 'Active',
+        locationLabel: `${listingOwner.region} Farm`,
+        region: listingOwner.region,
+        status: LISTING_STATUS.ACTIVE,
       });
 
       toast({ 
@@ -202,6 +239,7 @@ const CreateListing = () => {
 
   const handleSaveDraft = async () => {
     if (!user) return;
+    if (!listingOwner) return;
 
     try {
       setIsSubmitting(true);
@@ -219,9 +257,25 @@ const CreateListing = () => {
         photoPaths = uploaded.map((item) => item.path);
       }
 
+      console.log('[CreateListing] Draft payload diagnostics', {
+        currentUser: user ? { id: user.id, role: user.role, kycStatus: user.kycStatus } : null,
+        isAdmin: isAdminSeller,
+        selectedFarmerOwner: null,
+          listingPayloadPreview: {
+            farmerId: listingOwner.id,
+            commodity,
+            grade,
+            quantityKg: parseFloat(quantity || '0'),
+            pricePerKg: parseFloat(price || '0'),
+            status: LISTING_STATUS.DRAFT,
+            imageSource,
+            photoCount: validPhotos.length,
+          },
+      });
+
       await createListing({
-        farmerId: user.id,
-        farmerName: user.name,
+        farmerId: listingOwner.id,
+        farmerName: listingOwner.name,
         commodity,
         grade,
         quantityKg: parseFloat(quantity || '0'),
@@ -230,9 +284,9 @@ const CreateListing = () => {
         photoPaths,
         photoSource: imageSource,
         libraryImageId: imageSource === 'library' ? selectedLibraryImage?.id : null,
-        locationLabel: `${user.region} Farm`,
-        region: user.region,
-        status: 'Draft',
+        locationLabel: `${listingOwner.region} Farm`,
+        region: listingOwner.region,
+        status: LISTING_STATUS.DRAFT,
       });
 
       toast({ 
@@ -288,6 +342,66 @@ const CreateListing = () => {
         )}
 
         <Stepper steps={steps} currentStep={step} className="mb-8" />
+
+        {false && isAdminSeller && (
+          <div className="farm-card mb-6 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Assign Farmer Owner</p>
+              <p className="text-xs text-muted-foreground">
+                Admin-created listings must be assigned to a real farmer profile.
+              </p>
+            </div>
+
+            <div className="relative">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={farmerSearch}
+                onChange={(event) => setFarmerSearch(event.target.value)}
+                placeholder="Search by farmer name, email, or phone"
+                className="w-full pl-9 pr-3 py-3 bg-card border border-border rounded-xl text-foreground text-sm min-h-[46px] focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div className="border border-border rounded-xl max-h-48 overflow-y-auto">
+              {isLoadingFarmers ? (
+                <p className="text-sm text-muted-foreground p-3">Loading farmers...</p>
+              ) : filteredFarmers.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-3">No farmer profile matches your search.</p>
+              ) : (
+                filteredFarmers.map((farmer) => (
+                  <button
+                    key={farmer.id}
+                    type="button"
+                    onClick={() => setSelectedFarmer(farmer)}
+                    className={`w-full text-left px-3 py-2 border-b border-border last:border-b-0 transition-colors ${
+                      selectedFarmer?.id === farmer.id ? 'bg-primary/10' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-foreground">{farmer.fullName}</p>
+                    <p className="text-xs text-muted-foreground break-words">{farmer.email || farmer.phone}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {farmer.region} • KYC {farmer.kycStatus}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {selectedFarmer ? (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+                <p className="text-xs text-primary font-semibold uppercase tracking-wide">Selected Farmer Owner</p>
+                <p className="text-sm font-medium text-foreground">{selectedFarmer.fullName}</p>
+                <p className="text-xs text-muted-foreground break-words">{selectedFarmer.email || 'No email'} • {selectedFarmer.phone}</p>
+                <p className="text-xs text-muted-foreground">KYC: {selectedFarmer.kycStatus}</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-farm-warning/30 bg-farm-warning/10 px-3 py-2">
+                <p className="text-xs text-foreground">Please assign this listing to a farmer before publishing.</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {step === 0 && (
           <div className="space-y-4">
@@ -483,7 +597,7 @@ const CreateListing = () => {
                 
                 <div className="pt-3 border-t border-border">
                   <p className="text-sm text-muted-foreground">Location</p>
-                  <p className="font-medium text-foreground">{user?.region} Farm</p>
+                  <p className="font-medium text-foreground">{listingOwner?.region || user?.region} Farm</p>
                 </div>
 
                 <div className="pt-3 border-t border-border">
@@ -494,6 +608,22 @@ const CreateListing = () => {
                       : 'Custom farmer upload'}
                   </p>
                 </div>
+
+                {isAdminSeller && (
+                  <div className="pt-3 border-t border-border">
+                    <p className="text-sm text-muted-foreground">Listing Owner</p>
+                    {listingOwner ? (
+                      <>
+                        <p className="font-medium text-foreground">{listingOwner.name}</p>
+                        <p className="text-xs text-muted-foreground break-words">
+                          {listingOwner.email || 'No email'} • {listingOwner.phone} • Role Admin
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-farm-warning">No listing owner found.</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -515,7 +645,13 @@ const CreateListing = () => {
               </div>
               <button 
                 onClick={handlePublish} 
-                disabled={!price || !quantity || !isKYCApproved || isSubmitting} 
+                disabled={
+                  !price ||
+                  !quantity ||
+                  !isKYCApproved ||
+                  isSubmitting ||
+                  !listingOwner
+                } 
                 className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[52px] active:scale-[0.98]"
               >
                 <Check className="w-5 h-5" /> 

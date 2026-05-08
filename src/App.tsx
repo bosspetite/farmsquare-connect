@@ -96,7 +96,7 @@ const App = () => (
                 
                 {/* Farmer */}
                 <Route path="/farmer/dashboard" element={<RouteGuard allowedRoles={['farmer']}><FarmerDashboard /></RouteGuard>} />
-                <Route path="/farmer/create-listing" element={<RouteGuard allowedRoles={['farmer', 'admin']}><CreateListing /></RouteGuard>} />
+                <Route path="/farmer/create-listing" element={<RouteGuard allowedRoles={['farmer']}><CreateListing /></RouteGuard>} />
                 <Route path="/farmer/listings" element={<RouteGuard allowedRoles={['farmer']}><FarmerListings /></RouteGuard>} />
                 <Route path="/farmer/orders" element={<RouteGuard allowedRoles={['farmer']}><FarmerOrders /></RouteGuard>} />
                 <Route path="/farmer/orders/:orderId" element={<RouteGuard allowedRoles={['farmer']}><FarmerOrderDetail /></RouteGuard>} />

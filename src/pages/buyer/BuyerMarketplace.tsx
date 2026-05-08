@@ -7,6 +7,7 @@ import { GradeType, Listing } from '@/types';
 import { getProduceImage } from '@/utils/produceImages';
 import { useAuth } from '@/hooks/useAuth';
 import { getMarketplaceListings } from '@/services/listingService';
+import { MARKETPLACE_VISIBLE_LISTING_STATUS } from '@/constants/listingStatus';
 
 const commodityFilters = ['All', 'Maize', 'Cassava', 'Rice', 'Yam', 'Sorghum'];
 const gradeFilters: (GradeType | 'All')[] = ['All', 'A', 'B', 'C'];
@@ -41,9 +42,12 @@ const BuyerMarketplace = () => {
     try {
       setIsLoadingListings(true);
       setLoadError(null);
+      console.log('Buyer marketplace current user:', user);
       const marketplaceListings = await getMarketplaceListings();
+      console.log('Marketplace listings result:', marketplaceListings);
       setListings(marketplaceListings);
     } catch (error: any) {
+      console.error('Marketplace query error:', error);
       setLoadError(error?.message || 'Unable to load marketplace listings right now.');
     } finally {
       setIsLoadingListings(false);
@@ -55,8 +59,19 @@ const BuyerMarketplace = () => {
   }, []);
 
   const filteredListings = useMemo(() => {
+    console.log('Marketplace filters:', {
+      search,
+      commodityFilter,
+      gradeFilter,
+      regionFilter,
+      priceMin,
+      priceMax,
+      sortBy,
+      totalListingsBeforeFilter: listings.length,
+    });
+
     let results = listings.filter((listing) => {
-      if (listing.status !== 'Active') {
+      if (listing.status !== MARKETPLACE_VISIBLE_LISTING_STATUS) {
         return false;
       }
 

@@ -45,6 +45,7 @@ const BuyerListingDetail = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showImageModal, setShowImageModal] = useState(false);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [listingBlockedReason, setListingBlockedReason] = useState<string | null>(null);
   const isMobileCheckout = typeof window !== 'undefined' ? window.matchMedia('(max-width: 640px)').matches : false;
 
   const loadListing = async () => {
@@ -57,6 +58,7 @@ const BuyerListingDetail = () => {
     try {
       setIsLoading(true);
       setLoadError(null);
+      setListingBlockedReason(null);
       const marketplaceListing = await getMarketplaceListingById(listingId);
       setListing(marketplaceListing);
     } catch (error: any) {
@@ -97,6 +99,15 @@ const BuyerListingDetail = () => {
       toast({
         title: 'Minimum order not met',
         description: `Minimum order quantity is ${listing.minOrderKg}kg`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (listingBlockedReason) {
+      toast({
+        title: 'Order unavailable',
+        description: listingBlockedReason,
         variant: 'destructive',
       });
       return;
@@ -164,7 +175,15 @@ const BuyerListingDetail = () => {
       });
 
       return pendingOrder.id;
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.message || '';
+      if (
+        typeof errorMessage === 'string' &&
+        (errorMessage.toLowerCase().includes('not currently linked to a valid farmer') ||
+          errorMessage.toLowerCase().includes('not currently linked to a valid seller'))
+      ) {
+        setListingBlockedReason(errorMessage);
+      }
       console.error('[BuyerListingDetail] Failed to create pending order', {
         isMobileCheckout,
         listingId: listing.id,
@@ -304,6 +323,18 @@ const BuyerListingDetail = () => {
           <ArrowLeft className="w-5 h-5" /> Back to Marketplace
         </button>
 
+        {listingBlockedReason && (
+          <div className="farm-card bg-destructive/5 border-destructive/20">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-foreground">Listing owner needs repair</p>
+                <p className="text-sm text-muted-foreground">{listingBlockedReason}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           <div
             className="w-full h-80 rounded-2xl bg-muted flex items-center justify-center overflow-hidden relative group cursor-pointer"
@@ -432,9 +463,17 @@ const BuyerListingDetail = () => {
               navigate('/buyer/kyc');
               return;
             }
+            if (listingBlockedReason) {
+              toast({
+                title: 'Order unavailable',
+                description: listingBlockedReason,
+                variant: 'destructive',
+              });
+              return;
+            }
             setShowCheckout(true);
           }}
-          disabled={!isVerified || isCreatingOrder}
+          disabled={!isVerified || isCreatingOrder || Boolean(listingBlockedReason)}
           className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold btn-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] active:scale-[0.98]"
         >
           <ShoppingCart className="w-5 h-5" />
