@@ -5,6 +5,7 @@ interface NotificationRow {
     id: string;
     recipient_role: UserRole | null;
     recipient_user_id: string | null;
+    actor_id?: string | null;
     type: string;
     title: string;
     message: string;
@@ -12,7 +13,15 @@ interface NotificationRow {
     entity_id: string | null;
     related_order_id?: string | null;
     related_product_id?: string | null;
+    related_listing_id?: string | null;
+    related_payment_id?: string | null;
+    related_escrow_id?: string | null;
+    related_kyc_id?: string | null;
+    related_withdrawal_id?: string | null;
+    link_url?: string | null;
+    metadata?: Record<string, unknown> | null;
     is_read: boolean;
+    read_at?: string | null;
     created_at: string;
 }
 
@@ -23,6 +32,7 @@ interface NotificationRealtimePayload {
 interface CreateNotificationInput {
     recipientRole?: UserRole | null;
     recipientUserId?: string | null;
+    actorId?: string | null;
     type: string;
     title: string;
     message: string;
@@ -30,6 +40,13 @@ interface CreateNotificationInput {
     entityId?: string | null;
     relatedOrderId?: string | null;
     relatedProductId?: string | null;
+    relatedListingId?: string | null;
+    relatedPaymentId?: string | null;
+    relatedEscrowId?: string | null;
+    relatedKycId?: string | null;
+    relatedWithdrawalId?: string | null;
+    linkUrl?: string | null;
+    metadata?: Record<string, unknown> | null;
 }
 
 interface OrderNotificationDetails {
@@ -37,8 +54,18 @@ interface OrderNotificationDetails {
     buyer_id: string;
     farmer_id: string;
     total_amount: number;
-    buyer: { full_name: string | null; email: string | null } | null;
-    farmer: { full_name: string | null; email: string | null } | null;
+    buyer: {
+        id?: string | null;
+        role?: string | null;
+        full_name: string | null;
+        email: string | null;
+    } | null;
+    farmer: {
+        id?: string | null;
+        role?: string | null;
+        full_name: string | null;
+        email: string | null;
+    } | null;
     order_items: Array<{
         listing_id: string;
         quantity_kg: number;
@@ -68,21 +95,93 @@ const NOTIFICATIONS_SELECT_BASE =
 
 const NOTIFICATIONS_SELECT_WITH_RELATED = `${NOTIFICATIONS_SELECT_BASE}, related_order_id, related_product_id`;
 
+const NOTIFICATIONS_SELECT_WITH_EXTENDED = `${NOTIFICATIONS_SELECT_WITH_RELATED}, actor_id, related_listing_id, related_payment_id, related_escrow_id, related_kyc_id, link_url, metadata, read_at`;
+const NOTIFICATIONS_SELECT_WITH_FULL_RELATIONS = `${NOTIFICATIONS_SELECT_WITH_EXTENDED}, related_withdrawal_id`;
+
+type ErrorLike = {
+    message?: string;
+    code?: string;
+    details?: string | null;
+    hint?: string | null;
+};
+
+const extractErrorLike = (error: unknown): ErrorLike => {
+    if (!error || typeof error !== "object") {
+        return {};
+    }
+
+    const e = error as Record<string, unknown>;
+    return {
+        message: typeof e.message === "string" ? e.message : undefined,
+        code: typeof e.code === "string" ? e.code : undefined,
+        details: typeof e.details === "string" ? e.details : null,
+        hint: typeof e.hint === "string" ? e.hint : null,
+    };
+};
+
+const getErrorMessage = (error: unknown): string => {
+    if (typeof error === "string") {
+        return error;
+    }
+
+    if (
+        error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof (error as { message?: unknown }).message === "string"
+    ) {
+        return (error as { message: string }).message;
+    }
+
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return "";
+    }
+};
+
 const isMissingNotificationsSchemaError = (error: unknown) =>
-    error instanceof Error &&
-    (error.message.toLowerCase().includes("notifications") ||
-        error.message.toLowerCase().includes("recipient_role") ||
-        error.message.toLowerCase().includes("entity_type") ||
-        error.message.toLowerCase().includes("related_order_id") ||
-        error.message.toLowerCase().includes("related_product_id") ||
-        error.message.toLowerCase().includes("read_at") ||
-        error.message.toLowerCase().includes("column") ||
-        error.message.toLowerCase().includes("does not exist"));
+    (() => {
+        const message = getErrorMessage(error).toLowerCase();
+        return (
+            message.includes("notifications") ||
+            message.includes("recipient_role") ||
+            message.includes("entity_type") ||
+            message.includes("related_order_id") ||
+            message.includes("related_product_id") ||
+            message.includes("related_listing_id") ||
+            message.includes("related_payment_id") ||
+            message.includes("related_escrow_id") ||
+            message.includes("related_kyc_id") ||
+            message.includes("related_withdrawal_id") ||
+            message.includes("link_url") ||
+            message.includes("metadata") ||
+            message.includes("actor_id") ||
+            message.includes("read_at") ||
+            message.includes("column") ||
+            message.includes("does not exist")
+        );
+    })();
 
 const isColumnMissingError = (error: unknown) =>
-    error instanceof Error &&
-    error.message.toLowerCase().includes("column") &&
-    error.message.toLowerCase().includes("does not exist");
+    (() => {
+        const { code } = extractErrorLike(error);
+        const message = getErrorMessage(error).toLowerCase();
+        const isSchemaCacheColumnError =
+            message.includes("could not find") &&
+            message.includes("column") &&
+            message.includes("schema cache");
+        const isPostgresMissingColumnError =
+            message.includes("column") && message.includes("does not exist");
+        const isPostgrestSchemaCacheCode =
+            typeof code === "string" && code.startsWith("PGRST2");
+
+        return (
+            isSchemaCacheColumnError ||
+            isPostgresMissingColumnError ||
+            isPostgrestSchemaCacheCode
+        );
+    })();
 
 const mapNotification = (row: NotificationRow): AppNotification => ({
     id: row.id,
@@ -93,7 +192,18 @@ const mapNotification = (row: NotificationRow): AppNotification => ({
     message: row.message,
     entityType: row.entity_type,
     entityId: row.entity_id,
+    actorId: row.actor_id ?? null,
+    relatedOrderId: row.related_order_id ?? null,
+    relatedProductId: row.related_product_id ?? null,
+    relatedListingId: row.related_listing_id ?? null,
+    relatedPaymentId: row.related_payment_id ?? null,
+    relatedEscrowId: row.related_escrow_id ?? null,
+    relatedKycId: row.related_kyc_id ?? null,
+    relatedWithdrawalId: row.related_withdrawal_id ?? null,
+    linkUrl: row.link_url ?? null,
+    metadata: row.metadata ?? {},
     isRead: row.is_read,
+    readAt: row.read_at ?? null,
     createdAt: row.created_at,
 });
 
@@ -113,9 +223,19 @@ const mapRowLikeNotification = (
         message: String(row.message),
         entity_type: row.entity_type ?? null,
         entity_id: row.entity_id ?? null,
+        actor_id: row.actor_id ?? null,
         related_order_id: row.related_order_id ?? null,
         related_product_id: row.related_product_id ?? null,
+        related_listing_id: row.related_listing_id ?? null,
+        related_payment_id: row.related_payment_id ?? null,
+        related_escrow_id: row.related_escrow_id ?? null,
+        related_kyc_id: row.related_kyc_id ?? null,
+        related_withdrawal_id: row.related_withdrawal_id ?? null,
+        link_url: row.link_url ?? null,
+        metadata:
+            (row.metadata as Record<string, unknown> | null | undefined) ?? {},
         is_read: Boolean(row.is_read),
+        read_at: row.read_at ?? null,
         created_at: row.created_at
             ? String(row.created_at)
             : new Date().toISOString(),
@@ -134,6 +254,9 @@ const dedupeNotifications = (notifications: AppNotification[]) => {
             new Date(left.createdAt).getTime(),
     );
 };
+
+const isNonEmptyString = (value: unknown): value is string =>
+    typeof value === "string" && value.trim().length > 0;
 
 const formatNaira = (amount: number) =>
     `NGN ${Number.isFinite(amount) ? amount.toLocaleString() : "0"}`;
@@ -175,7 +298,12 @@ export const createNotification = async (
 ): Promise<AppNotification> => {
     const supabase = ensureSupabase();
 
+    if (!isNonEmptyString(payload.type) || !isNonEmptyString(payload.title) || !isNonEmptyString(payload.message)) {
+        throw new Error("Notification payload is missing required type/title/message.");
+    }
+
     const baseRow = {
+        actor_id: payload.actorId ?? null,
         type: payload.type,
         title: payload.title,
         message: payload.message,
@@ -187,15 +315,33 @@ export const createNotification = async (
         related_product_id:
             payload.relatedProductId ??
             (payload.entityType === "listing" ? payload.entityId : null),
+        related_listing_id:
+            payload.relatedListingId ??
+            payload.relatedProductId ??
+            (payload.entityType === "listing" ? payload.entityId : null),
+        related_payment_id: payload.relatedPaymentId ?? null,
+        related_escrow_id: payload.relatedEscrowId ?? null,
+        related_kyc_id: payload.relatedKycId ?? null,
+        related_withdrawal_id: payload.relatedWithdrawalId ?? null,
+        link_url: payload.linkUrl ?? null,
+        metadata: payload.metadata ?? {},
     };
 
-    const directRecipientUserId = payload.recipientUserId ?? null;
+    const directRecipientUserId = isNonEmptyString(payload.recipientUserId)
+        ? payload.recipientUserId
+        : null;
     let recipientUserIds: string[] = [];
 
     if (directRecipientUserId) {
         recipientUserIds = [directRecipientUserId];
     } else if (payload.recipientRole === "admin") {
         recipientUserIds = await resolveAdminRecipientIds();
+    }
+
+    if (!directRecipientUserId && payload.recipientRole !== "admin") {
+        throw new Error(
+            `Notification recipient is missing for type "${payload.type}".`,
+        );
     }
 
     const insertRows =
@@ -220,22 +366,45 @@ export const createNotification = async (
         await supabase
             .from("notifications")
             .insert(insertRows)
-            .select(NOTIFICATIONS_SELECT_WITH_RELATED);
+            .select(NOTIFICATIONS_SELECT_WITH_FULL_RELATIONS);
 
     data = (insertDataWithRelated || null) as NotificationRow[] | null;
     error = insertErrorWithRelated;
 
     if (error && isColumnMissingError(error)) {
-        const legacyRows = insertRows.map(
+        const fallbackRows = insertRows.map(
+            ({
+                actor_id,
+                related_listing_id,
+                related_payment_id,
+                related_escrow_id,
+                related_kyc_id,
+                related_withdrawal_id,
+                link_url,
+                metadata,
+                ...row
+            }) => row,
+        );
+        const legacyRows = fallbackRows.map(
             ({ related_order_id, related_product_id, ...row }) => row,
         );
         const { data: legacyInsertData, error: legacyInsertError } =
             await supabase
                 .from("notifications")
-                .insert(legacyRows)
-                .select(NOTIFICATIONS_SELECT_BASE);
+                .insert(fallbackRows)
+                .select(NOTIFICATIONS_SELECT_WITH_RELATED);
         data = (legacyInsertData || null) as NotificationRow[] | null;
         error = legacyInsertError;
+
+        if (error && isColumnMissingError(error)) {
+            const { data: baseInsertData, error: baseInsertError } =
+                await supabase
+                    .from("notifications")
+                    .insert(legacyRows)
+                    .select(NOTIFICATIONS_SELECT_BASE);
+            data = (baseInsertData || null) as NotificationRow[] | null;
+            error = baseInsertError;
+        }
     }
 
     if (error) {
@@ -248,12 +417,23 @@ export const createNotification = async (
                 id: `pending-${Date.now()}`,
                 recipientRole: payload.recipientRole ?? null,
                 recipientUserId: payload.recipientUserId ?? null,
+                actorId: payload.actorId ?? null,
                 type: payload.type,
                 title: payload.title,
                 message: payload.message,
                 entityType: payload.entityType ?? null,
                 entityId: payload.entityId ?? null,
+                relatedOrderId: payload.relatedOrderId ?? null,
+                relatedProductId: payload.relatedProductId ?? null,
+                relatedListingId: payload.relatedListingId ?? null,
+                relatedPaymentId: payload.relatedPaymentId ?? null,
+                relatedEscrowId: payload.relatedEscrowId ?? null,
+                relatedKycId: payload.relatedKycId ?? null,
+                relatedWithdrawalId: payload.relatedWithdrawalId ?? null,
+                linkUrl: payload.linkUrl ?? null,
+                metadata: payload.metadata ?? {},
                 isRead: false,
+                readAt: null,
                 createdAt: new Date().toISOString(),
             };
         }
@@ -277,6 +457,76 @@ export const createNotification = async (
     return mapNotification(first);
 };
 
+export const createManyNotifications = async (
+    payloads: CreateNotificationInput[],
+): Promise<void> => {
+    if (!payloads.length) {
+        return;
+    }
+
+    const settled = await Promise.allSettled(
+        payloads.map((payload) => createNotification(payload)),
+    );
+    const failures = settled
+        .map((result, index) => ({ result, payload: payloads[index] }))
+        .filter(
+            (entry): entry is {
+                result: PromiseRejectedResult;
+                payload: CreateNotificationInput;
+            } => entry.result.status === "rejected",
+        );
+
+    if (failures.length > 0) {
+        console.error("[Notifications] Some notifications failed to create", {
+            attempted: payloads.length,
+            failed: failures.length,
+            failures: failures.map((failure) => ({
+                type: failure.payload.type,
+                recipientRole: failure.payload.recipientRole ?? null,
+                recipientUserId: failure.payload.recipientUserId ?? null,
+                reason:
+                    failure.result.reason instanceof Error
+                        ? failure.result.reason.message
+                        : getErrorMessage(failure.result.reason),
+            })),
+        });
+    } else {
+        console.log("[Notifications] Notification batch created", {
+            attempted: payloads.length,
+            failed: 0,
+        });
+    }
+};
+
+export const notifyAdmins = async (
+    payload: Omit<CreateNotificationInput, "recipientRole" | "recipientUserId">,
+): Promise<void> => {
+    await createNotification({
+        ...payload,
+        recipientRole: "admin",
+    });
+};
+
+export const notifyFarmer = async (
+    farmerId: string,
+    payload: Omit<CreateNotificationInput, "recipientRole" | "recipientUserId">,
+): Promise<void> => {
+    await createNotification({
+        ...payload,
+        recipientUserId: farmerId,
+    });
+};
+
+export const notifyBuyer = async (
+    buyerId: string,
+    payload: Omit<CreateNotificationInput, "recipientRole" | "recipientUserId">,
+): Promise<void> => {
+    await createNotification({
+        ...payload,
+        recipientUserId: buyerId,
+    });
+};
+
 export const getNotificationsForUser = async (
     userId?: string | null,
     role?: UserRole | null,
@@ -294,15 +544,60 @@ export const getNotificationsForUser = async (
                 .is("recipient_user_id", null);
         };
 
+        console.log("[Notifications] Fetching notifications", {
+            scope,
+            userId: userId ?? null,
+            role: role ?? null,
+        });
+
         const { data: relatedData, error: relatedError } = await applyScope(
             supabase
                 .from("notifications")
-                .select(NOTIFICATIONS_SELECT_WITH_RELATED)
+                .select(NOTIFICATIONS_SELECT_WITH_FULL_RELATIONS)
                 .order("created_at", { ascending: false })
                 .limit(100),
         );
 
         if (relatedError && isColumnMissingError(relatedError)) {
+            const errInfo = extractErrorLike(relatedError);
+            console.warn(
+                "[Notifications] Extended select unavailable; retrying with reduced columns",
+                {
+                    scope,
+                    code: errInfo.code,
+                    message: errInfo.message,
+                    details: errInfo.details,
+                    hint: errInfo.hint,
+                },
+            );
+            const { data: withRelatedData, error: withRelatedError } =
+                await applyScope(
+                    supabase
+                        .from("notifications")
+                        .select(NOTIFICATIONS_SELECT_WITH_RELATED)
+                        .order("created_at", { ascending: false })
+                        .limit(100),
+                );
+
+            if (!withRelatedError) {
+                return (withRelatedData || []) as NotificationRow[];
+            }
+
+            if (!isColumnMissingError(withRelatedError)) {
+                const errInfo = extractErrorLike(withRelatedError);
+                console.error(
+                    "[Notifications] Reduced select failed with non-schema error",
+                    {
+                        scope,
+                        code: errInfo.code,
+                        message: errInfo.message,
+                        details: errInfo.details,
+                        hint: errInfo.hint,
+                    },
+                );
+                throw withRelatedError;
+            }
+
             const { data: legacyData, error: legacyError } = await applyScope(
                 supabase
                     .from("notifications")
@@ -311,15 +606,42 @@ export const getNotificationsForUser = async (
                     .limit(100),
             );
             if (legacyError) {
+                const errInfo = extractErrorLike(legacyError);
+                console.error(
+                    "[Notifications] Legacy base select failed",
+                    {
+                        scope,
+                        code: errInfo.code,
+                        message: errInfo.message,
+                        details: errInfo.details,
+                        hint: errInfo.hint,
+                    },
+                );
                 throw legacyError;
             }
+            console.log("[Notifications] Legacy base notifications loaded", {
+                scope,
+                count: (legacyData || []).length,
+            });
             return (legacyData || []) as NotificationRow[];
         }
 
         if (relatedError) {
+            const errInfo = extractErrorLike(relatedError);
+            console.error("[Notifications] Notification query failed", {
+                scope,
+                code: errInfo.code,
+                message: errInfo.message,
+                details: errInfo.details,
+                hint: errInfo.hint,
+            });
             throw relatedError;
         }
 
+        console.log("[Notifications] Notifications loaded", {
+            scope,
+            count: (relatedData || []).length,
+        });
         return (relatedData || []) as NotificationRow[];
     };
 
@@ -343,7 +665,18 @@ export const getNotificationsForUser = async (
             );
             return [];
         }
-        throw error;
+        const errInfo = extractErrorLike(error);
+        console.error("[Notifications] Failed to load notifications for user", {
+            userId: userId ?? null,
+            role: role ?? null,
+            code: errInfo.code,
+            message: errInfo.message,
+            details: errInfo.details,
+            hint: errInfo.hint,
+        });
+
+        const message = errInfo.message || "Failed to load notifications.";
+        throw new Error(message);
     }
 };
 
@@ -354,6 +687,8 @@ export const getUnreadNotificationCount = async (
     const notifications = await getNotificationsForUser(userId, role);
     return notifications.filter((notification) => !notification.isRead).length;
 };
+
+export const getNotificationsForCurrentUser = getNotificationsForUser;
 
 export const markNotificationRead = async (
     notificationId: string,
@@ -522,6 +857,44 @@ const extractListingPayload = (order: OrderNotificationDetails) => {
     };
 };
 
+const recordOrderEvent = async (payload: {
+    orderId: string;
+    actorId?: string | null;
+    eventType: string;
+    title: string;
+    description?: string | null;
+    metadata?: Record<string, unknown> | null;
+}) => {
+    try {
+        const supabase = ensureSupabase();
+        const { error } = await supabase.from("order_events").insert({
+            order_id: payload.orderId,
+            actor_id: payload.actorId ?? null,
+            event_type: payload.eventType,
+            title: payload.title,
+            description: payload.description ?? null,
+            metadata: payload.metadata ?? {},
+        });
+
+        if (error) {
+            if (isMissingNotificationsSchemaError(error)) {
+                return;
+            }
+            console.error("[Notifications] Failed to record order event", {
+                orderId: payload.orderId,
+                eventType: payload.eventType,
+                error,
+            });
+        }
+    } catch (error) {
+        console.error("[Notifications] Failed to record order event", {
+            orderId: payload.orderId,
+            eventType: payload.eventType,
+            error,
+        });
+    }
+};
+
 export const createOrderNotifications = async (
     orderId: string,
 ): Promise<void> => {
@@ -535,8 +908,8 @@ export const createOrderNotifications = async (
                 buyer_id,
                 farmer_id,
                 total_amount,
-                buyer:profiles!orders_buyer_id_fkey(full_name, email),
-                farmer:profiles!orders_farmer_id_fkey(full_name, email),
+                buyer:profiles!orders_buyer_id_fkey(id, role, full_name, email),
+                farmer:profiles!orders_farmer_id_fkey(id, role, full_name, email),
                 order_items (
                     listing_id,
                     quantity_kg,
@@ -563,10 +936,58 @@ export const createOrderNotifications = async (
         const amount = Number(order.total_amount || 0);
         const buyerName = order.buyer?.full_name || "Buyer";
         const farmerName = order.farmer?.full_name || "Farmer";
+        let farmerProfileId = isNonEmptyString(order.farmer_id)
+            ? order.farmer_id
+            : null;
 
-        await Promise.allSettled([
-            createNotification({
-                recipientUserId: order.farmer_id,
+        if (!farmerProfileId && listingId) {
+            const { data: listingOwnerRow, error: listingOwnerError } =
+                await supabase
+                    .from("listings")
+                    .select("farmer_id")
+                    .eq("id", listingId)
+                    .maybeSingle();
+
+            if (listingOwnerError) {
+                console.error(
+                    "[Notifications] Could not resolve farmer from listing while creating order notifications",
+                    {
+                        orderId,
+                        listingId,
+                        error: listingOwnerError,
+                    },
+                );
+            } else if (
+                isNonEmptyString(
+                    (listingOwnerRow as { farmer_id?: string | null } | null)
+                        ?.farmer_id,
+                )
+            ) {
+                farmerProfileId = (
+                    listingOwnerRow as { farmer_id: string }
+                ).farmer_id;
+                console.log(
+                    "[Notifications] Resolved farmer recipient from listing owner fallback",
+                    {
+                        orderId,
+                        listingId,
+                        farmerProfileId,
+                    },
+                );
+            }
+        }
+
+        console.log("Payment success order:", order);
+        console.log("Buyer recipient:", order.buyer);
+        console.log("Farmer recipient:", order.farmer);
+
+        const notificationTasks: CreateNotificationInput[] = [];
+
+        if (farmerProfileId) {
+            console.log("Creating farmer notification...");
+            notificationTasks.push({
+                actorId: order.buyer_id,
+                recipientUserId: farmerProfileId,
                 type: "new_order",
                 title: "New order received",
                 message: `A buyer placed an order for ${commodity} (${quantityKg || 0}kg). Amount: ${formatNaira(amount)}. Please review and confirm availability.`,
@@ -574,8 +995,26 @@ export const createOrderNotifications = async (
                 entityId: orderId,
                 relatedOrderId: orderId,
                 relatedProductId: listingId,
-            }),
-            createNotification({
+                relatedListingId: listingId,
+                linkUrl: `/farmer/orders/${orderId}`,
+                metadata: {
+                    amount,
+                    quantityKg,
+                    commodity,
+                },
+            });
+        } else {
+            console.warn("[Notifications] Skipping direct farmer notification due to invalid farmer recipient", {
+                orderId,
+                farmerId: order.farmer_id,
+                farmerRole: order.farmer?.role || null,
+            });
+        }
+
+        console.log("Creating admin notification...");
+        notificationTasks.push(
+            {
+                actorId: order.buyer_id,
                 recipientRole: "admin",
                 type: "new_order",
                 title: "New order placed",
@@ -584,8 +1023,20 @@ export const createOrderNotifications = async (
                 entityId: orderId,
                 relatedOrderId: orderId,
                 relatedProductId: listingId,
-            }),
-            createNotification({
+                relatedListingId: listingId,
+                linkUrl: `/admin/orders`,
+                metadata: {
+                    amount,
+                    quantityKg,
+                    commodity,
+                },
+            },
+        );
+
+        console.log("Creating buyer notification...");
+        notificationTasks.push(
+            {
+                actorId: order.buyer_id,
                 recipientUserId: order.buyer_id,
                 type: "payment_successful",
                 title: "Payment successful",
@@ -594,8 +1045,89 @@ export const createOrderNotifications = async (
                 entityId: orderId,
                 relatedOrderId: orderId,
                 relatedProductId: listingId,
-            }),
-        ]);
+                relatedListingId: listingId,
+                linkUrl: `/buyer/orders/${orderId}`,
+                metadata: {
+                    amount,
+                    quantityKg,
+                    commodity,
+                },
+            },
+        );
+
+        if (farmerProfileId) {
+            notificationTasks.push(
+            {
+                actorId: order.buyer_id,
+                recipientUserId: farmerProfileId,
+                type: "escrow_held",
+                title: "Funds held in escrow",
+                message: `${formatNaira(amount)} has been held in escrow for order ${orderId.slice(0, 8)}.`,
+                entityType: "order",
+                entityId: orderId,
+                relatedOrderId: orderId,
+                relatedProductId: listingId,
+                relatedListingId: listingId,
+                linkUrl: `/farmer/orders/${orderId}`,
+                metadata: {
+                    amount,
+                    stage: "held",
+                },
+            },
+            );
+        }
+
+        notificationTasks.push(
+            {
+                actorId: order.buyer_id,
+                recipientRole: "admin",
+                type: "escrow_held",
+                title: "Escrow funded",
+                message: `Escrow is now held for order ${orderId.slice(0, 8)} (${formatNaira(amount)}).`,
+                entityType: "order",
+                entityId: orderId,
+                relatedOrderId: orderId,
+                relatedProductId: listingId,
+                relatedListingId: listingId,
+                linkUrl: `/admin/orders`,
+                metadata: {
+                    amount,
+                    stage: "held",
+                },
+            },
+        );
+
+        await createManyNotifications(notificationTasks);
+        console.log("Notification insert result:", {
+            orderId,
+            attempted: notificationTasks.length,
+        });
+
+        await recordOrderEvent({
+            orderId,
+            actorId: order.buyer_id,
+            eventType: "order_paid",
+            title: "Payment successful",
+            description: `Payment was confirmed for ${commodity}.`,
+            metadata: {
+                amount,
+                quantityKg,
+                commodity,
+                paymentStatus: "Paid",
+            },
+        });
+
+        await recordOrderEvent({
+            orderId,
+            actorId: order.buyer_id,
+            eventType: "escrow_held",
+            title: "Escrow funded",
+            description: `Funds were held in escrow for this order.`,
+            metadata: {
+                amount,
+                stage: "held",
+            },
+        });
 
         try {
             const { error: invokeError } = await supabase.functions.invoke(
@@ -619,7 +1151,7 @@ export const createOrderNotifications = async (
 
         await sendWhatsAppNotification({
             orderId,
-            farmerId: order.farmer_id,
+            farmerId: farmerProfileId || order.farmer_id,
         });
 
         console.log("[Notifications] Created order notifications", {
@@ -670,13 +1202,22 @@ export const createOrderStatusUpdatedNotifications = async (
 
         const order = orderData as unknown as OrderNotificationDetails;
         const { listingId, commodity } = extractListingPayload(order);
+        const farmerRecipientId = isNonEmptyString(order.farmer_id)
+            ? order.farmer_id
+            : null;
+        const canNotifyFarmerDirectly = Boolean(farmerRecipientId);
 
         const normalizedStatus = statusLabel.toLowerCase();
-        const notificationTasks: Array<Promise<unknown>> = [];
+        const actorId =
+            normalizedStatus === "delivered" || normalizedStatus === "disputed"
+                ? order.buyer_id
+                : order.farmer_id;
+        const notificationTasks: Array<CreateNotificationInput> = [];
 
         if (normalizedStatus === "accepted") {
             notificationTasks.push(
-                createNotification({
+                {
+                    actorId,
                     recipientUserId: order.buyer_id,
                     type: "order_accepted",
                     title: "Farmer accepted your order",
@@ -685,8 +1226,11 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
-                createNotification({
+                    relatedListingId: listingId,
+                    linkUrl: `/buyer/orders/${orderId}`,
+                },
+                {
+                    actorId,
                     recipientRole: "admin",
                     type: "order_accepted",
                     title: "Order accepted",
@@ -695,11 +1239,14 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
+                    relatedListingId: listingId,
+                    linkUrl: "/admin/orders",
+                },
             );
         } else if (normalizedStatus === "rejected") {
             notificationTasks.push(
-                createNotification({
+                {
+                    actorId,
                     recipientUserId: order.buyer_id,
                     type: "order_rejected",
                     title: "Order rejected",
@@ -708,8 +1255,11 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
-                createNotification({
+                    relatedListingId: listingId,
+                    linkUrl: `/buyer/orders/${orderId}`,
+                },
+                {
+                    actorId,
                     recipientRole: "admin",
                     type: "order_rejected",
                     title: "Order rejected",
@@ -718,12 +1268,15 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
+                    relatedListingId: listingId,
+                    linkUrl: "/admin/orders",
+                },
             );
         } else if (normalizedStatus === "delivered") {
-            notificationTasks.push(
-                createNotification({
-                    recipientUserId: order.farmer_id,
+            if (canNotifyFarmerDirectly && farmerRecipientId) {
+                notificationTasks.push({
+                    actorId,
+                    recipientUserId: farmerRecipientId,
                     type: "order_completed",
                     title: "Order completed",
                     message: `Buyer confirmed delivery for ${commodity}. Escrow funds are now released to your available balance.`,
@@ -731,8 +1284,26 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
-                createNotification({
+                    relatedListingId: listingId,
+                    linkUrl: `/farmer/orders/${orderId}`,
+                });
+            }
+            notificationTasks.push(
+                {
+                    actorId,
+                    recipientUserId: order.buyer_id,
+                    type: "order_completed",
+                    title: "Order completed",
+                    message: `Delivery confirmation recorded for your ${commodity} order.`,
+                    entityType: "order",
+                    entityId: orderId,
+                    relatedOrderId: orderId,
+                    relatedProductId: listingId,
+                    relatedListingId: listingId,
+                    linkUrl: `/buyer/orders/${orderId}`,
+                },
+                {
+                    actorId,
                     recipientRole: "admin",
                     type: "escrow_released",
                     title: "Escrow released",
@@ -741,22 +1312,28 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
+                    relatedListingId: listingId,
+                    linkUrl: "/admin/orders",
+                },
             );
         } else {
-            notificationTasks.push(
-                createNotification({
-                    recipientUserId: order.buyer_id,
-                    type: "order_status_updated",
-                    title: "Order status updated",
-                    message: `Your ${commodity} order is now ${statusLabel}.`,
-                    entityType: "order",
-                    entityId: orderId,
-                    relatedOrderId: orderId,
-                    relatedProductId: listingId,
-                }),
-                createNotification({
-                    recipientUserId: order.farmer_id,
+            notificationTasks.push({
+                actorId,
+                recipientUserId: order.buyer_id,
+                type: "order_status_updated",
+                title: "Order status updated",
+                message: `Your ${commodity} order is now ${statusLabel}.`,
+                entityType: "order",
+                entityId: orderId,
+                relatedOrderId: orderId,
+                relatedProductId: listingId,
+                relatedListingId: listingId,
+                linkUrl: `/buyer/orders/${orderId}`,
+            });
+            if (canNotifyFarmerDirectly && farmerRecipientId) {
+                notificationTasks.push({
+                    actorId,
+                    recipientUserId: farmerRecipientId,
                     type: "order_status_updated",
                     title: "Order status updated",
                     message: `Order for ${commodity} is now ${statusLabel}.`,
@@ -764,8 +1341,13 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
-                createNotification({
+                    relatedListingId: listingId,
+                    linkUrl: `/farmer/orders/${orderId}`,
+                });
+            }
+            notificationTasks.push(
+                {
+                    actorId,
                     recipientRole: "admin",
                     type: "order_status_updated",
                     title: "Order status updated",
@@ -774,11 +1356,25 @@ export const createOrderStatusUpdatedNotifications = async (
                     entityId: orderId,
                     relatedOrderId: orderId,
                     relatedProductId: listingId,
-                }),
+                    relatedListingId: listingId,
+                    linkUrl: "/admin/orders",
+                },
             );
         }
 
-        await Promise.allSettled(notificationTasks);
+        await createManyNotifications(notificationTasks);
+
+        await recordOrderEvent({
+            orderId,
+            actorId,
+            eventType: `order_${normalizedStatus}`,
+            title: `Order status changed to ${statusLabel}`,
+            description: `Order for ${commodity} is now ${statusLabel}.`,
+            metadata: {
+                status: statusLabel,
+                commodity,
+            },
+        });
     } catch (error) {
         console.error(
             "[Notifications] Failed to create status update notifications",

@@ -216,12 +216,23 @@ export interface AppNotification {
   id: string;
   recipientRole?: UserRole | null;
   recipientUserId?: string | null;
+  actorId?: string | null;
   type: string;
   title: string;
   message: string;
   entityType?: string | null;
   entityId?: string | null;
+  relatedOrderId?: string | null;
+  relatedProductId?: string | null;
+  relatedListingId?: string | null;
+  relatedPaymentId?: string | null;
+  relatedEscrowId?: string | null;
+  relatedKycId?: string | null;
+  relatedWithdrawalId?: string | null;
+  linkUrl?: string | null;
+  metadata?: Record<string, unknown> | null;
   isRead: boolean;
+  readAt?: string | null;
   createdAt: string;
 }
 

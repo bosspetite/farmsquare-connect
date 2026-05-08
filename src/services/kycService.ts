@@ -1,6 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 import { createNotification } from '@/services/notificationService';
-import { clearProfileCache, getCurrentProfile, getProfileById, mapProfileToUser } from '@/services/profileService';
+import { clearProfileCache, ensureProfileExists, getCurrentProfile, getProfileById, mapProfileToUser } from '@/services/profileService';
 import { KYCData, KYCStatus, UserRole } from '@/types';
 
 export interface VerificationState {
@@ -98,6 +98,74 @@ const ensureSupabase = () => {
   }
 
   return getSupabaseClient();
+};
+
+const normalizeRole = (value: unknown): UserRole | null => {
+  if (value === 'buyer' || value === 'farmer' || value === 'agent' || value === 'admin') {
+    return value;
+  }
+
+  return null;
+};
+
+const inferKycRoleFromPayload = (payload: Partial<KYCData>): UserRole => {
+  const looksLikeBuyerKyb = Boolean(
+    payload.businessName ||
+      payload.businessType ||
+      payload.businessRegistrationNumber ||
+      payload.authorizedRepresentativeName
+  );
+
+  return looksLikeBuyerKyb ? 'buyer' : 'farmer';
+};
+
+const ensureProfileForKycSubmission = async (userId: string, payload: Partial<KYCData>) => {
+  let profile = await getProfileById(userId);
+  if (profile) {
+    return profile;
+  }
+
+  const supabase = ensureSupabase();
+  const {
+    data: { user: authUser },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  console.warn('[KYC] Profile missing at submission start; attempting profile recovery', {
+    requestedUserId: userId,
+    authUserId: authUser?.id ?? null,
+    hasAuthError: Boolean(authError),
+  });
+
+  if (authError || !authUser) {
+    throw authError || new Error('Could not load authenticated user for profile recovery.');
+  }
+
+  if (authUser.id !== userId) {
+    throw new Error('Authenticated user does not match verification profile owner.');
+  }
+
+  const metadata = authUser.user_metadata || {};
+  const recoveredRole =
+    normalizeRole(metadata.role) ||
+    inferKycRoleFromPayload(payload) ||
+    'buyer';
+
+  const recoveredProfile = await ensureProfileExists({
+    id: userId,
+    email: authUser.email || null,
+    fullName: metadata.full_name || authUser.email || null,
+    role: recoveredRole,
+    region: metadata.region || 'Lagos',
+    phone: metadata.phone || null,
+  });
+
+  console.log('[KYC] Profile recovered for submission', {
+    userId,
+    recoveredRole: recoveredProfile.role,
+  });
+
+  return recoveredProfile;
 };
 
 const coerceKycStatus = (status?: string | null): KYCStatus => {
@@ -1213,7 +1281,7 @@ export const submitKyc = async (
     ),
   });
 
-  const profile = await getProfileById(userId);
+  const profile = await ensureProfileForKycSubmission(userId, payload);
   if (!profile) {
     throw new Error('Profile not found for KYC submission.');
   }
